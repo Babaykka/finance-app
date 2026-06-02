@@ -89,9 +89,7 @@ def _write_dashboard(worksheet) -> None:
     for column_index, header in enumerate(["Место", "Тип", "Валюта/актив", "Сумма", "Статус", "Приоритет"], start=8):
         worksheet.cell(row=4, column=column_index, value=header)
     worksheet["H5"] = (
-        f'=FILTER({{\'02 Места хранения\'!B:B,\'02 Места хранения\'!{storage_type}:{storage_type},'
-        f'\'02 Места хранения\'!{storage_asset}:{storage_asset},\'02 Места хранения\'!{storage_amount}:{storage_amount},'
-        f'\'02 Места хранения\'!{storage_status}:{storage_status},\'02 Места хранения\'!{storage_priority}:{storage_priority}}},'
+        f'=FILTER(CHOOSECOLS(\'02 Места хранения\'!B:R,1,2,5,6,16,17),'
         f'(\'02 Места хранения\'!{storage_status}:{storage_status}="проверить")'
         f'+(\'02 Места хранения\'!{storage_type}:{storage_type}="у доверенного лица")'
         f'+(\'02 Места хранения\'!{storage_priority}:{storage_priority}="срочно"))'
@@ -139,9 +137,8 @@ def _write_payment_debt_and_decision_blocks(worksheet) -> None:
     worksheet["C15"] = "Сумма"
     worksheet["D15"] = "Статус"
     worksheet["A16"] = (
-        '=SORT(FILTER({\'04 График и оплаты\'!E:E,\'04 График и оплаты\'!C:C,'
-        '\'04 График и оплаты\'!F:F,\'04 График и оплаты\'!H:H},'
-        '\'04 График и оплаты\'!D:D="план",\'04 График и оплаты\'!H:H<>"отменено"),1,TRUE)'
+        '=SORT(FILTER(CHOOSECOLS(\'04 График и оплаты\'!C:H,3,1,4,6),'
+        '(\'04 График и оплаты\'!D:D="план")*(\'04 График и оплаты\'!H:H<>"отменено")),1,TRUE)'
     )
 
     worksheet["E14"] = "Статусы долгов"
@@ -158,9 +155,8 @@ def _write_payment_debt_and_decision_blocks(worksheet) -> None:
     worksheet["K15"] = "Приоритет"
     worksheet["L15"] = "Статус"
     worksheet["H16"] = (
-        '=FILTER({\'08 Решения\'!B:B,\'08 Решения\'!C:C,\'08 Решения\'!D:D,'
-        '\'08 Решения\'!G:G,\'08 Решения\'!H:H},'
-        '\'08 Решения\'!H:H<>"сделано",\'08 Решения\'!H:H<>"")'
+        '=FILTER(CHOOSECOLS(\'08 Решения\'!B:H,1,2,3,6,7),'
+        '(\'08 Решения\'!H:H<>"сделано")*(\'08 Решения\'!H:H<>""))'
     )
 
 

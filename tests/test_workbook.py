@@ -73,6 +73,7 @@ class WorkbookTest(unittest.TestCase):
             ["Место", "Тип", "Валюта/актив", "Сумма", "Статус", "Приоритет"],
         )
         self.assertIn("FILTER", dashboard["H5"].value)
+        self.assertIn("CHOOSECOLS", dashboard["H5"].value)
         self.assertIn("проверить", dashboard["H5"].value)
         self.assertIn("у доверенного лица", dashboard["H5"].value)
         self.assertIn("срочно", dashboard["H5"].value)
@@ -93,12 +94,34 @@ class WorkbookTest(unittest.TestCase):
 
         self.assertEqual(dashboard["A14"].value, "Ближайшие ожидаемые платежи")
         self.assertIn("FILTER", dashboard["A16"].value)
+        self.assertIn("CHOOSECOLS", dashboard["A16"].value)
         self.assertIn("'04 График и оплаты'", dashboard["A16"].value)
         self.assertEqual(dashboard["E14"].value, "Статусы долгов")
         self.assertIn("COUNTIF", dashboard["F16"].value)
         self.assertEqual(dashboard["H14"].value, "Решения")
         self.assertIn("FILTER", dashboard["H16"].value)
+        self.assertIn("CHOOSECOLS", dashboard["H16"].value)
         self.assertIn("'08 Решения'", dashboard["H16"].value)
+
+    def test_formulas_do_not_use_google_sheets_range_array_literals(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "finance-system-template.xlsx"
+            build_workbook(output)
+            workbook = load_workbook(output, data_only=False)
+
+        formulas = []
+        for worksheet in workbook.worksheets:
+            for row in worksheet.iter_rows():
+                for cell in row:
+                    if isinstance(cell.value, str) and cell.value.startswith("="):
+                        formulas.append((worksheet.title, cell.coordinate, cell.value))
+
+        offenders = [
+            (sheet, coordinate, formula)
+            for sheet, coordinate, formula in formulas
+            if "{" in formula and "!" in formula
+        ]
+        self.assertEqual(offenders, [])
 
     def test_debt_remaining_amount_is_formula_derived_from_actual_payments(self):
         with tempfile.TemporaryDirectory() as tmpdir:
