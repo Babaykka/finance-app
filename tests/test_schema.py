@@ -1,6 +1,7 @@
+from dataclasses import FrozenInstanceError
 import unittest
 
-from finance_system.schema import LISTS, SHEETS, sheet_by_name
+from finance_system.schema import LISTS, SHEETS, Column, SheetSpec, sheet_by_name
 
 
 class SchemaTest(unittest.TestCase):
@@ -51,6 +52,26 @@ class SchemaTest(unittest.TestCase):
         self.assertIn("доходное банковское хранение", LISTS["ТипыМест"])
         self.assertIn("накопительный счет", LISTS["ПодтипыМест"])
         self.assertIn("вклад", LISTS["ПодтипыМест"])
+
+    def test_schema_dataclasses_are_frozen(self):
+        column = Column("id_example", "ID example")
+        sheet = SheetSpec("Example", "Example purpose", (column,))
+
+        with self.assertRaises(FrozenInstanceError):
+            column.title = "Changed"
+        with self.assertRaises(FrozenInstanceError):
+            sheet.name = "Changed"
+
+    def test_sheet_by_name_raises_for_unknown_sheet(self):
+        with self.assertRaises(KeyError) as context:
+            sheet_by_name("missing")
+
+        self.assertIn("Unknown sheet: missing", str(context.exception))
+
+    def test_schema_collections_are_tuples(self):
+        self.assertIsInstance(SHEETS, tuple)
+        for sheet in SHEETS:
+            self.assertIsInstance(sheet.columns, tuple, sheet.name)
 
 
 if __name__ == "__main__":
