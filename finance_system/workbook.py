@@ -56,8 +56,9 @@ def build_workbook(output_path: Path = DEFAULT_OUTPUT) -> Path:
 def _write_dashboard(worksheet) -> None:
     storage_asset = column_letter_for("02 Места хранения", "asset")
     storage_amount = column_letter_for("02 Места хранения", "amount")
+    storage_type = column_letter_for("02 Места хранения", "storage_type")
     storage_status = column_letter_for("02 Места хранения", "status")
-    storage_last_column = get_column_letter(len(sheet_by_name("02 Места хранения").columns))
+    storage_priority = column_letter_for("02 Места хранения", "attention_priority")
     debt_asset = column_letter_for("03 Долги", "asset")
     debt_remaining_amount = column_letter_for("03 Долги", "remaining_amount")
 
@@ -66,29 +67,101 @@ def _write_dashboard(worksheet) -> None:
     worksheet["A4"] = "Актив"
     worksheet["B4"] = "Места хранения"
     worksheet["C4"] = "Долги"
-    worksheet["H4"] = "Требует внимания"
-    worksheet["A5"] = "RUB"
-    worksheet["B5"] = (
-        f"=SUMIF('02 Места хранения'!${storage_asset}:${storage_asset},"
-        f"A5,'02 Места хранения'!${storage_amount}:${storage_amount})"
-    )
-    worksheet["C5"] = (
-        f"=SUMIF('03 Долги'!${debt_asset}:${debt_asset},"
-        f"A5,'03 Долги'!${debt_remaining_amount}:${debt_remaining_amount})"
-    )
-    worksheet["H5"] = (
-        f'=FILTER(\'02 Места хранения\'!A:{storage_last_column},'
-        f'\'02 Места хранения\'!{storage_status}:{storage_status}="проверить")'
-    )
+    for row_index, asset in enumerate(LISTS["ВалютыАктивы"], start=5):
+        worksheet.cell(row=row_index, column=1, value=asset)
+        worksheet.cell(
+            row=row_index,
+            column=2,
+            value=(
+                f"=SUMIF('02 Места хранения'!${storage_asset}:${storage_asset},"
+                f"A{row_index},'02 Места хранения'!${storage_amount}:${storage_amount})"
+            ),
+        )
+        worksheet.cell(
+            row=row_index,
+            column=3,
+            value=(
+                f"=SUMIF('03 Долги'!${debt_asset}:${debt_asset},"
+                f"A{row_index},'03 Долги'!${debt_remaining_amount}:${debt_remaining_amount})"
+            ),
+        )
 
-    for row in worksheet.iter_rows(min_row=4, max_row=4, min_col=1, max_col=8):
+    for column_index, header in enumerate(["Место", "Тип", "Валюта/актив", "Сумма", "Статус", "Приоритет"], start=8):
+        worksheet.cell(row=4, column=column_index, value=header)
+    worksheet["H5"] = (
+        f'=FILTER({{\'02 Места хранения\'!B:B,\'02 Места хранения\'!{storage_type}:{storage_type},'
+        f'\'02 Места хранения\'!{storage_asset}:{storage_asset},\'02 Места хранения\'!{storage_amount}:{storage_amount},'
+        f'\'02 Места хранения\'!{storage_status}:{storage_status},\'02 Места хранения\'!{storage_priority}:{storage_priority}}},'
+        f'(\'02 Места хранения\'!{storage_status}:{storage_status}="проверить")'
+        f'+(\'02 Места хранения\'!{storage_type}:{storage_type}="у доверенного лица")'
+        f'+(\'02 Места хранения\'!{storage_priority}:{storage_priority}="срочно"))'
+    )
+    _write_storage_distribution(worksheet)
+    _write_payment_debt_and_decision_blocks(worksheet)
+
+    for row in worksheet.iter_rows(min_row=4, max_row=4, min_col=1, max_col=20):
         for cell in row:
-            cell.fill = HEADER_FILL
-            cell.font = HEADER_FONT
+            if cell.value:
+                cell.fill = HEADER_FILL
+                cell.font = HEADER_FONT
 
     worksheet.freeze_panes = "A4"
-    for column_index, width in {1: 16, 2: 20, 3: 18, 8: 32}.items():
+    for column_index, width in {1: 16, 2: 20, 3: 18, 8: 24, 9: 28, 10: 18, 11: 16, 12: 18, 13: 18, 14: 30}.items():
         worksheet.column_dimensions[get_column_letter(column_index)].width = width
+
+
+def _write_storage_distribution(worksheet) -> None:
+    worksheet["N3"] = "Распределение мест хранения"
+    worksheet["N3"].font = HEADER_FONT
+    worksheet["N4"] = "Тип места"
+    for column_index, asset in enumerate(LISTS["ВалютыАктивы"], start=15):
+        worksheet.cell(row=4, column=column_index, value=asset)
+
+    for row_index, storage_type in enumerate(LISTS["ТипыМест"], start=5):
+        worksheet.cell(row=row_index, column=14, value=storage_type)
+        for column_index in range(15, 15 + len(LISTS["ВалютыАктивы"])):
+            asset_cell = f"{get_column_letter(column_index)}$4"
+            worksheet.cell(
+                row=row_index,
+                column=column_index,
+                value=(
+                    "=SUMIFS('02 Места хранения'!$G:$G,"
+                    f"'02 Места хранения'!$C:$C,$N{row_index},"
+                    f"'02 Места хранения'!$F:$F,{asset_cell})"
+                ),
+            )
+
+
+def _write_payment_debt_and_decision_blocks(worksheet) -> None:
+    worksheet["A14"] = "Ближайшие ожидаемые платежи"
+    worksheet["A15"] = "Дата"
+    worksheet["B15"] = "Должник/клиент"
+    worksheet["C15"] = "Сумма"
+    worksheet["D15"] = "Статус"
+    worksheet["A16"] = (
+        '=SORT(FILTER({\'04 График и оплаты\'!E:E,\'04 График и оплаты\'!C:C,'
+        '\'04 График и оплаты\'!F:F,\'04 График и оплаты\'!H:H},'
+        '\'04 График и оплаты\'!D:D="план",\'04 График и оплаты\'!H:H<>"отменено"),1,TRUE)'
+    )
+
+    worksheet["E14"] = "Статусы долгов"
+    worksheet["E15"] = "Статус"
+    worksheet["F15"] = "Количество"
+    for row_index, status in enumerate(LISTS["СтатусыДолгов"], start=16):
+        worksheet.cell(row=row_index, column=5, value=status)
+        worksheet.cell(row=row_index, column=6, value=f'=COUNTIF(\'03 Долги\'!$H:$H,E{row_index})')
+
+    worksheet["H14"] = "Решения"
+    worksheet["H15"] = "Дата"
+    worksheet["I15"] = "Область"
+    worksheet["J15"] = "Действие"
+    worksheet["K15"] = "Приоритет"
+    worksheet["L15"] = "Статус"
+    worksheet["H16"] = (
+        '=FILTER({\'08 Решения\'!B:B,\'08 Решения\'!C:C,\'08 Решения\'!D:D,'
+        '\'08 Решения\'!G:G,\'08 Решения\'!H:H},'
+        '\'08 Решения\'!H:H<>"сделано",\'08 Решения\'!H:H<>"")'
+    )
 
 
 def _write_reference_lists(worksheet) -> None:
@@ -121,9 +194,31 @@ def _write_data_sheet(worksheet, sheet_spec: SheetSpec) -> None:
         if column.dropdown:
             _add_dropdown(worksheet, column_index, column.dropdown)
 
+    if sheet_spec.name == "03 Долги":
+        _write_debt_remaining_formulas(worksheet)
+
     worksheet.freeze_panes = f"A{sheet_spec.frozen_rows + 1}"
     worksheet.auto_filter.ref = worksheet.dimensions
     _add_conditional_formatting(worksheet, sheet_spec)
+
+
+def _write_debt_remaining_formulas(worksheet) -> None:
+    debt_id = column_letter_for("03 Долги", "id_debt")
+    original_amount = column_letter_for("03 Долги", "original_amount")
+    remaining_amount = column_letter_for("03 Долги", "remaining_amount")
+    payment_debt_id = column_letter_for("04 График и оплаты", "id_debt")
+    payment_record_type = column_letter_for("04 График и оплаты", "record_type")
+    payment_amount = column_letter_for("04 График и оплаты", "amount")
+    payment_status = column_letter_for("04 График и оплаты", "status")
+
+    for row_index in range(2, DATA_ROW_LIMIT + 1):
+        worksheet[f"{remaining_amount}{row_index}"] = (
+            f'=IF({debt_id}{row_index}="","",{original_amount}{row_index}-'
+            f"SUMIFS('04 График и оплаты'!${payment_amount}:${payment_amount},"
+            f"'04 График и оплаты'!${payment_debt_id}:${payment_debt_id},{debt_id}{row_index},"
+            f'\'04 График и оплаты\'!${payment_record_type}:${payment_record_type},"факт",'
+            f'\'04 График и оплаты\'!${payment_status}:${payment_status},"<>отменено"))'
+        )
 
 
 def _add_dropdown(worksheet, column_index: int, list_name: str) -> None:
@@ -145,6 +240,8 @@ def _add_conditional_formatting(worksheet, sheet_spec: SheetSpec) -> None:
 
     if sheet_spec.name == "02 Места хранения":
         storage_type = column_letter_for(sheet_spec.name, "storage_type")
+        checked_at = column_letter_for(sheet_spec.name, "checked_at")
+        review_or_end_date = column_letter_for(sheet_spec.name, "review_or_end_date")
         storage_status = column_letter_for(sheet_spec.name, "status")
         worksheet.conditional_formatting.add(
             full_range,
@@ -153,6 +250,20 @@ def _add_conditional_formatting(worksheet, sheet_spec: SheetSpec) -> None:
         worksheet.conditional_formatting.add(
             full_range,
             FormulaRule(formula=[f'${storage_status}2="проверить"'], fill=CHECK_FILL),
+        )
+        worksheet.conditional_formatting.add(
+            full_range,
+            FormulaRule(formula=[f'AND(${checked_at}2<TODAY()-30,${storage_status}2<>"закрыто")'], fill=CHECK_FILL),
+        )
+        worksheet.conditional_formatting.add(
+            full_range,
+            FormulaRule(
+                formula=[
+                    f'AND(${storage_type}2="доходное банковское хранение",'
+                    f'${review_or_end_date}2<=TODAY()+14,${storage_status}2<>"закрыто")'
+                ],
+                fill=TRUSTED_PERSON_FILL,
+            ),
         )
     elif sheet_spec.name == "03 Долги":
         debt_status = column_letter_for(sheet_spec.name, "status")

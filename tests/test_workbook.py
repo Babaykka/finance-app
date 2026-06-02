@@ -62,9 +62,55 @@ class WorkbookTest(unittest.TestCase):
 
         dashboard = workbook["01 Главная"]
         self.assertEqual(dashboard["A1"].value, "Финансовая система")
+        self.assertEqual(
+            [dashboard.cell(row=row, column=1).value for row in range(5, 5 + len(LISTS["ВалютыАктивы"]))],
+            LISTS["ВалютыАктивы"],
+        )
         self.assertEqual(dashboard["B5"].value, "=SUMIF('02 Места хранения'!$F:$F,A5,'02 Места хранения'!$G:$G)")
         self.assertEqual(dashboard["C5"].value, "=SUMIF('03 Долги'!$E:$E,A5,'03 Долги'!$G:$G)")
+        self.assertEqual(
+            [dashboard.cell(row=4, column=column).value for column in range(8, 14)],
+            ["Место", "Тип", "Валюта/актив", "Сумма", "Статус", "Приоритет"],
+        )
         self.assertIn("FILTER", dashboard["H5"].value)
+        self.assertIn("проверить", dashboard["H5"].value)
+        self.assertIn("у доверенного лица", dashboard["H5"].value)
+        self.assertIn("срочно", dashboard["H5"].value)
+
+    def test_dashboard_contains_operational_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "finance-system-template.xlsx"
+            build_workbook(output)
+            workbook = load_workbook(output, data_only=False)
+
+        dashboard = workbook["01 Главная"]
+        self.assertEqual(dashboard["N3"].value, "Распределение мест хранения")
+        self.assertEqual([dashboard.cell(row=4, column=column).value for column in range(15, 15 + len(LISTS["ВалютыАктивы"]))], LISTS["ВалютыАктивы"])
+        self.assertIn("SUMIFS", dashboard["O5"].value)
+        self.assertIn("'02 Места хранения'", dashboard["O5"].value)
+        self.assertIn("$C:$C", dashboard["O5"].value)
+        self.assertIn("$F:$F", dashboard["O5"].value)
+
+        self.assertEqual(dashboard["A14"].value, "Ближайшие ожидаемые платежи")
+        self.assertIn("FILTER", dashboard["A16"].value)
+        self.assertIn("'04 График и оплаты'", dashboard["A16"].value)
+        self.assertEqual(dashboard["E14"].value, "Статусы долгов")
+        self.assertIn("COUNTIF", dashboard["F16"].value)
+        self.assertEqual(dashboard["H14"].value, "Решения")
+        self.assertIn("FILTER", dashboard["H16"].value)
+        self.assertIn("'08 Решения'", dashboard["H16"].value)
+
+    def test_debt_remaining_amount_is_formula_derived_from_actual_payments(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "finance-system-template.xlsx"
+            build_workbook(output)
+            workbook = load_workbook(output, data_only=False)
+
+        formula = workbook["03 Долги"]["G2"].value
+        self.assertEqual(
+            formula,
+            '=IF(A2="","",F2-SUMIFS(\'04 График и оплаты\'!$F:$F,\'04 График и оплаты\'!$B:$B,A2,\'04 График и оплаты\'!$D:$D,"факт",\'04 График и оплаты\'!$H:$H,"<>отменено"))',
+        )
 
     def test_data_validations_are_present(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -130,6 +176,8 @@ class WorkbookTest(unittest.TestCase):
 
         self.assertIn('$C2="у доверенного лица"', storage_formulas)
         self.assertIn('$Q2="проверить"', storage_formulas)
+        self.assertIn('AND($P2<TODAY()-30,$Q2<>"закрыто")', storage_formulas)
+        self.assertIn('AND($C2="доходное банковское хранение",$O2<=TODAY()+14,$Q2<>"закрыто")', storage_formulas)
         self.assertIn('$H2="просрочено"', debt_formulas)
 
 
