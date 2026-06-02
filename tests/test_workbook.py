@@ -176,8 +176,14 @@ class WorkbookTest(unittest.TestCase):
 
         self.assertIn('$C2="у доверенного лица"', storage_formulas)
         self.assertIn('$Q2="проверить"', storage_formulas)
-        self.assertIn('AND($P2<TODAY()-30,$Q2<>"закрыто")', storage_formulas)
-        self.assertIn('AND($C2="доходное банковское хранение",$O2<=TODAY()+14,$Q2<>"закрыто")', storage_formulas)
+        stale_checked_formula = _formula_containing(storage_formulas, "TODAY()-30")
+        self.assertIn('$A2<>""', stale_checked_formula)
+        self.assertIn("TODAY()-30", stale_checked_formula)
+        income_review_formula = _formula_containing(storage_formulas, "TODAY()+14")
+        self.assertIn('$A2<>""', income_review_formula)
+        self.assertIn('$O2<>""', income_review_formula)
+        self.assertIn("TODAY()+14", income_review_formula)
+        self.assertIn("доходное банковское хранение", income_review_formula)
         self.assertIn('$H2="просрочено"', debt_formulas)
 
 
@@ -187,6 +193,13 @@ def _conditional_formatting_formulas(worksheet):
         for rule in conditional_formatting.rules:
             formulas.extend(rule.formula)
     return formulas
+
+
+def _formula_containing(formulas, expected_text):
+    for formula in formulas:
+        if expected_text in formula:
+            return formula
+    raise AssertionError(f"No conditional formatting formula contains {expected_text!r}: {formulas}")
 
 
 if __name__ == "__main__":

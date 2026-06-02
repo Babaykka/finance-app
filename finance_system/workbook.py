@@ -253,13 +253,16 @@ def _add_conditional_formatting(worksheet, sheet_spec: SheetSpec) -> None:
         )
         worksheet.conditional_formatting.add(
             full_range,
-            FormulaRule(formula=[f'AND(${checked_at}2<TODAY()-30,${storage_status}2<>"закрыто")'], fill=CHECK_FILL),
+            FormulaRule(
+                formula=[f'AND($A2<>"",${checked_at}2<TODAY()-30,${storage_status}2<>"закрыто")'],
+                fill=CHECK_FILL,
+            ),
         )
         worksheet.conditional_formatting.add(
             full_range,
             FormulaRule(
                 formula=[
-                    f'AND(${storage_type}2="доходное банковское хранение",'
+                    f'AND($A2<>"",${storage_type}2="доходное банковское хранение",${review_or_end_date}2<>"",'
                     f'${review_or_end_date}2<=TODAY()+14,${storage_status}2<>"закрыто")'
                 ],
                 fill=TRUSTED_PERSON_FILL,
