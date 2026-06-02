@@ -9,7 +9,7 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
 
-from finance_system.schema import LISTS, SHEETS, SheetSpec
+from finance_system.schema import LISTS, SHEETS, SheetSpec, sheet_by_name
 
 
 DEFAULT_OUTPUT = Path("dist/finance-system-template.xlsx")
@@ -20,6 +20,14 @@ HEADER_FONT = Font(bold=True)
 TRUSTED_PERSON_FILL = PatternFill("solid", fgColor="FFF2CC")
 CHECK_FILL = PatternFill("solid", fgColor="FCE4D6")
 OVERDUE_FILL = PatternFill("solid", fgColor="F4CCCC")
+
+
+def column_letter_for(sheet_name: str, column_key: str) -> str:
+    sheet_spec = sheet_by_name(sheet_name)
+    for column_index, column in enumerate(sheet_spec.columns, start=1):
+        if column.key == column_key:
+            return get_column_letter(column_index)
+    raise KeyError(f"Unknown column: {sheet_name}.{column_key}")
 
 
 def build_workbook(output_path: Path = DEFAULT_OUTPUT) -> Path:
@@ -46,6 +54,13 @@ def build_workbook(output_path: Path = DEFAULT_OUTPUT) -> Path:
 
 
 def _write_dashboard(worksheet) -> None:
+    storage_asset = column_letter_for("02 Места хранения", "asset")
+    storage_amount = column_letter_for("02 Места хранения", "amount")
+    storage_status = column_letter_for("02 Места хранения", "status")
+    storage_last_column = get_column_letter(len(sheet_by_name("02 Места хранения").columns))
+    debt_asset = column_letter_for("03 Долги", "asset")
+    debt_remaining_amount = column_letter_for("03 Долги", "remaining_amount")
+
     worksheet["A1"] = "Финансовая система"
     worksheet["A1"].font = Font(bold=True, size=16)
     worksheet["A4"] = "Актив"
@@ -53,9 +68,18 @@ def _write_dashboard(worksheet) -> None:
     worksheet["C4"] = "Долги"
     worksheet["H4"] = "Требует внимания"
     worksheet["A5"] = "RUB"
-    worksheet["B5"] = "=SUMIF('02 Места хранения'!$F:$F,A5,'02 Места хранения'!$G:$G)"
-    worksheet["C5"] = "=SUMIF('03 Долги'!$E:$E,A5,'03 Долги'!$G:$G)"
-    worksheet["H5"] = '=FILTER(\'02 Места хранения\'!A:S,\'02 Места хранения\'!Q:Q="проверить")'
+    worksheet["B5"] = (
+        f"=SUMIF('02 Места хранения'!${storage_asset}:${storage_asset},"
+        f"A5,'02 Места хранения'!${storage_amount}:${storage_amount})"
+    )
+    worksheet["C5"] = (
+        f"=SUMIF('03 Долги'!${debt_asset}:${debt_asset},"
+        f"A5,'03 Долги'!${debt_remaining_amount}:${debt_remaining_amount})"
+    )
+    worksheet["H5"] = (
+        f'=FILTER(\'02 Места хранения\'!A:{storage_last_column},'
+        f'\'02 Места хранения\'!{storage_status}:{storage_status}="проверить")'
+    )
 
     for row in worksheet.iter_rows(min_row=4, max_row=4, min_col=1, max_col=8):
         for cell in row:
@@ -120,18 +144,21 @@ def _add_conditional_formatting(worksheet, sheet_spec: SheetSpec) -> None:
     full_range = f"A2:{last_column}{DATA_ROW_LIMIT}"
 
     if sheet_spec.name == "02 Места хранения":
+        storage_type = column_letter_for(sheet_spec.name, "storage_type")
+        storage_status = column_letter_for(sheet_spec.name, "status")
         worksheet.conditional_formatting.add(
             full_range,
-            FormulaRule(formula=['$C2="у доверенного лица"'], fill=TRUSTED_PERSON_FILL),
+            FormulaRule(formula=[f'${storage_type}2="у доверенного лица"'], fill=TRUSTED_PERSON_FILL),
         )
         worksheet.conditional_formatting.add(
             full_range,
-            FormulaRule(formula=['$Q2="проверить"'], fill=CHECK_FILL),
+            FormulaRule(formula=[f'${storage_status}2="проверить"'], fill=CHECK_FILL),
         )
     elif sheet_spec.name == "03 Долги":
+        debt_status = column_letter_for(sheet_spec.name, "status")
         worksheet.conditional_formatting.add(
             full_range,
-            FormulaRule(formula=['$H2="просрочено"'], fill=OVERDUE_FILL),
+            FormulaRule(formula=[f'${debt_status}2="просрочено"'], fill=OVERDUE_FILL),
         )
 
 

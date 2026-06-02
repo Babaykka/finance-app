@@ -1,11 +1,15 @@
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 from openpyxl import load_workbook
 
-from finance_system.schema import LISTS
-from finance_system.workbook import build_workbook
+from finance_system.schema import LISTS, SHEETS
+from finance_system.workbook import build_workbook, column_letter_for
+
+
+BUNDLED_PYTHON = Path("/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3")
 
 
 class WorkbookTest(unittest.TestCase):
@@ -69,6 +73,73 @@ class WorkbookTest(unittest.TestCase):
 
         storage = workbook["02 Места хранения"]
         self.assertGreaterEqual(storage.data_validations.count, 8)
+
+    def test_column_letter_for_uses_schema_columns(self):
+        self.assertEqual(column_letter_for("02 Места хранения", "asset"), "F")
+        self.assertEqual(column_letter_for("02 Места хранения", "amount"), "G")
+        self.assertEqual(column_letter_for("03 Долги", "status"), "H")
+
+    def test_dropdown_validations_cover_all_schema_dropdowns(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "finance-system-template.xlsx"
+            build_workbook(output)
+            workbook = load_workbook(output, data_only=False)
+
+        for sheet_spec in SHEETS:
+            dropdown_columns = [column for column in sheet_spec.columns if column.dropdown]
+            if not dropdown_columns:
+                continue
+
+            worksheet = workbook[sheet_spec.name]
+            validations = list(worksheet.data_validations.dataValidation)
+            self.assertGreaterEqual(len(validations), len(dropdown_columns), sheet_spec.name)
+
+            validation_formulas = [validation.formula1 for validation in validations]
+            for column in dropdown_columns:
+                self.assertTrue(
+                    any(
+                        "06 Справочники" in formula
+                        and column_letter_for(sheet_spec.name, column.key) in str(validation.sqref)
+                        for formula, validation in zip(validation_formulas, validations)
+                    ),
+                    f"{sheet_spec.name}.{column.key}",
+                )
+
+    def test_cli_writes_workbook(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "cli-template.xlsx"
+            result = subprocess.run(
+                [str(BUNDLED_PYTHON), "-m", "finance_system.workbook", "--output", str(output)],
+                check=False,
+                capture_output=True,
+                cwd=Path(__file__).resolve().parents[1],
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Workbook written to", result.stdout)
+            self.assertTrue(output.exists())
+
+    def test_conditional_formatting_rules_are_present(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "finance-system-template.xlsx"
+            build_workbook(output)
+            workbook = load_workbook(output, data_only=False)
+
+        storage_formulas = _conditional_formatting_formulas(workbook["02 Места хранения"])
+        debt_formulas = _conditional_formatting_formulas(workbook["03 Долги"])
+
+        self.assertIn('$C2="у доверенного лица"', storage_formulas)
+        self.assertIn('$Q2="проверить"', storage_formulas)
+        self.assertIn('$H2="просрочено"', debt_formulas)
+
+
+def _conditional_formatting_formulas(worksheet):
+    formulas = []
+    for conditional_formatting in worksheet.conditional_formatting:
+        for rule in conditional_formatting.rules:
+            formulas.extend(rule.formula)
+    return formulas
 
 
 if __name__ == "__main__":
