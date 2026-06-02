@@ -4,9 +4,10 @@ import unittest
 from pathlib import Path
 
 from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 from finance_system.schema import LISTS, SHEETS
-from finance_system.workbook import build_workbook, column_letter_for
+from finance_system.workbook import DATA_ROW_LIMIT, build_workbook, column_letter_for
 
 
 BUNDLED_PYTHON = Path("/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3")
@@ -93,17 +94,15 @@ class WorkbookTest(unittest.TestCase):
             worksheet = workbook[sheet_spec.name]
             validations = list(worksheet.data_validations.dataValidation)
             self.assertGreaterEqual(len(validations), len(dropdown_columns), sheet_spec.name)
-
-            validation_formulas = [validation.formula1 for validation in validations]
+            validations_by_range = {str(validation.sqref): validation for validation in validations}
             for column in dropdown_columns:
-                self.assertTrue(
-                    any(
-                        "06 Справочники" in formula
-                        and column_letter_for(sheet_spec.name, column.key) in str(validation.sqref)
-                        for formula, validation in zip(validation_formulas, validations)
-                    ),
-                    f"{sheet_spec.name}.{column.key}",
-                )
+                column_letter = column_letter_for(sheet_spec.name, column.key)
+                range_ref = f"{column_letter}2:{column_letter}{DATA_ROW_LIMIT}"
+                list_column = get_column_letter(list(LISTS).index(column.dropdown) + 1)
+                expected_formula = f"'06 Справочники'!${list_column}$2:${list_column}${len(LISTS[column.dropdown]) + 1}"
+
+                self.assertIn(range_ref, validations_by_range, f"{sheet_spec.name}.{column.key}")
+                self.assertEqual(validations_by_range[range_ref].formula1, expected_formula)
 
     def test_cli_writes_workbook(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -117,7 +116,7 @@ class WorkbookTest(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("Workbook written to", result.stdout)
+            self.assertEqual(result.stdout.strip(), f"Workbook written to {output}")
             self.assertTrue(output.exists())
 
     def test_conditional_formatting_rules_are_present(self):
