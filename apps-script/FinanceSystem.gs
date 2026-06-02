@@ -38,10 +38,9 @@ function markSelectedStorageChecked() {
     return;
   }
 
-  const startRow = range.getRow();
   const rowCount = range.getNumRows();
   const checkedValues = Array.from({ length: rowCount }, () => [new Date()]);
-  sheet.getRange(startRow, STORAGE_CHECKED_AT_COLUMN, rowCount, 1).setValues(checkedValues);
+  sheet.getRange(range.getRow(), STORAGE_CHECKED_AT_COLUMN, rowCount, 1).setValues(checkedValues);
   spreadsheet.toast(`Проверено строк: ${rowCount}`, 'Финансы');
 }
 
@@ -49,8 +48,6 @@ function refreshAttention() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const dashboard = spreadsheet.getSheetByName(DASHBOARD_SHEET);
   const storage = spreadsheet.getSheetByName(STORAGE_SHEET);
-  spreadsheet.getSheetByName(DEBTS_SHEET);
-  spreadsheet.getSheetByName(PAYMENTS_SHEET);
 
   if (!dashboard || !storage) {
     spreadsheet.toast('Не найдены нужные листы.', 'Финансы');
@@ -78,8 +75,8 @@ function refreshAttention() {
 
   dashboard.getRange(ATTENTION_RANGE).clearContent();
   dashboard
-    .getRange(ATTENTION_START_ROW, ATTENTION_START_COLUMN, 1, ATTENTION_COLUMNS)
-    .setValues([['Место', 'Тип', 'Актив', 'Сумма', 'Статус', 'Приоритет']]);
+    .getRange('H4:M4')
+    .setValues([['Место', 'Тип', 'Валюта/актив', 'Сумма', 'Статус', 'Приоритет']]);
 
   if (attentionRows.length > 0) {
     dashboard
