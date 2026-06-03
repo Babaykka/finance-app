@@ -12,10 +12,10 @@ const createPrismaClient = () =>
     log: prismaLogLevels
   });
 
-export const db = isProduction
+export const prisma = isProduction
   ? createPrismaClient()
   : (globalForPrisma.prisma ?? createPrismaClient());
 
 if (!isProduction) {
-  globalForPrisma.prisma = db;
+  globalForPrisma.prisma = prisma;
 }
