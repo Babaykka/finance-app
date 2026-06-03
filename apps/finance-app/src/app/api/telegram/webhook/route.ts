@@ -63,16 +63,18 @@ const isAllowedTelegramUser = (telegramUserId: string) => {
   return !allowedUserId || allowedUserId === telegramUserId;
 };
 
-const assertWebhookSecret = (request: Request) => {
+const validateWebhookSecret = (request: Request) => {
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    return;
+    return NextResponse.json({ error: "TELEGRAM_WEBHOOK_SECRET is required" }, { status: 403 });
   }
 
   const actualSecret = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
   if (actualSecret !== webhookSecret) {
-    throw new Error("Telegram webhook secret mismatch");
+    return NextResponse.json({ error: "Telegram webhook secret mismatch" }, { status: 403 });
   }
+
+  return null;
 };
 
 const postToParseMessage = async (request: Request, body: unknown) => {
@@ -90,9 +92,18 @@ const postToParseMessage = async (request: Request, body: unknown) => {
 };
 
 export async function POST(request: Request) {
-  assertWebhookSecret(request);
+  const webhookSecretFailure = validateWebhookSecret(request);
+  if (webhookSecretFailure) {
+    return webhookSecretFailure;
+  }
 
-  const update = TelegramUpdateSchema.parse(await request.json());
+  let update: z.infer<typeof TelegramUpdateSchema>;
+
+  try {
+    update = TelegramUpdateSchema.parse(await request.json());
+  } catch {
+    return NextResponse.json({ error: "Invalid Telegram webhook payload" }, { status: 400 });
+  }
 
   if (update.callback_query) {
     return NextResponse.json({

@@ -10,6 +10,9 @@ const TelegramUserSchema = z.object({
 
 export type TelegramUser = z.infer<typeof TelegramUserSchema>;
 
+const DEFAULT_INIT_DATA_MAX_AGE_SECONDS = 24 * 60 * 60;
+const FUTURE_AUTH_DATE_SKEW_SECONDS = 60;
+
 const createHashMismatchError = () => new Error("Telegram init data hash mismatch");
 
 const assertHashMatches = (hash: string, expected: string) => {
@@ -29,7 +32,46 @@ const assertHashMatches = (hash: string, expected: string) => {
   }
 };
 
-export function verifyTelegramInitData(initData: string, botToken: string) {
+const getAuthDateSeconds = (params: URLSearchParams) => {
+  const authDate = params.get("auth_date");
+
+  if (!authDate) {
+    throw new Error("Telegram init data is missing auth_date");
+  }
+
+  if (!/^\d+$/.test(authDate)) {
+    throw new Error("Telegram init data auth_date is invalid");
+  }
+
+  const authDateSeconds = Number(authDate);
+  if (!Number.isSafeInteger(authDateSeconds)) {
+    throw new Error("Telegram init data auth_date is invalid");
+  }
+
+  return authDateSeconds;
+};
+
+const assertAuthDateIsFresh = (
+  authDateSeconds: number,
+  options: { maxAgeSeconds?: number; now?: Date } = {}
+) => {
+  const maxAgeSeconds = options.maxAgeSeconds ?? DEFAULT_INIT_DATA_MAX_AGE_SECONDS;
+  const nowSeconds = Math.floor((options.now?.getTime() ?? Date.now()) / 1000);
+
+  if (authDateSeconds > nowSeconds + FUTURE_AUTH_DATE_SKEW_SECONDS) {
+    throw new Error("Telegram init data auth_date is in the future");
+  }
+
+  if (nowSeconds - authDateSeconds > maxAgeSeconds) {
+    throw new Error("Telegram init data is stale");
+  }
+};
+
+export function verifyTelegramInitData(
+  initData: string,
+  botToken: string,
+  options: { maxAgeSeconds?: number; now?: Date } = {}
+) {
   const params = new URLSearchParams(initData);
   const hash = params.get("hash");
 
@@ -46,6 +88,7 @@ export function verifyTelegramInitData(initData: string, botToken: string) {
   const expected = crypto.createHmac("sha256", secret).update(checkString).digest("hex");
 
   assertHashMatches(hash, expected);
+  assertAuthDateIsFresh(getAuthDateSeconds(params), options);
 
   const userJson = params.get("user");
   if (!userJson) {

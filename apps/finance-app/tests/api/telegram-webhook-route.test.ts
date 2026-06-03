@@ -33,6 +33,21 @@ vi.mock("@/server/ai/openai-adapter", () => ({
   getOpenAiClient: mocks.getOpenAiClient
 }));
 
+const telegramWebhookRequest = (body: unknown, secret = "secret") =>
+  new Request("http://localhost/api/telegram/webhook", {
+    method: "POST",
+    headers: { "X-Telegram-Bot-Api-Secret-Token": secret },
+    body: JSON.stringify(body)
+  });
+
+const expectNoDownstreamCalls = (fetcher: ReturnType<typeof vi.fn>) => {
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
+  expect(mocks.downloadTelegramVoiceFile).not.toHaveBeenCalled();
+  expect(mocks.getOpenAiClient).not.toHaveBeenCalled();
+  expect(mocks.transcribeAudioFile).not.toHaveBeenCalled();
+};
+
 describe("telegram webhook route", () => {
   const originalBotToken = process.env.TELEGRAM_BOT_TOKEN;
   const originalWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -43,7 +58,7 @@ describe("telegram webhook route", () => {
     vi.clearAllMocks();
     process.env.TELEGRAM_BOT_TOKEN = "token";
     process.env.TELEGRAM_ALLOWED_USER_ID = "123";
-    delete process.env.TELEGRAM_WEBHOOK_SECRET;
+    process.env.TELEGRAM_WEBHOOK_SECRET = "secret";
     delete process.env.OPENAI_TRANSCRIBE_MODEL;
     mocks.getOpenAiClient.mockReturnValue(mocks.openAiClient);
   });
@@ -89,15 +104,12 @@ describe("telegram webhook route", () => {
     vi.stubGlobal("fetch", fetcher);
 
     const response = await POST(
-      new Request("http://localhost/api/telegram/webhook", {
-        method: "POST",
-        body: JSON.stringify({
-          message: {
-            chat: { id: 456 },
-            from: { id: 123 },
-            text: "Геворг должен 50000"
-          }
-        })
+      telegramWebhookRequest({
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "Геворг должен 50000"
+        }
       })
     );
 
@@ -142,15 +154,12 @@ describe("telegram webhook route", () => {
     mocks.transcribeAudioFile.mockResolvedValue("Геворг вернул 10000 рублей");
 
     const response = await POST(
-      new Request("http://localhost/api/telegram/webhook", {
-        method: "POST",
-        body: JSON.stringify({
-          message: {
-            chat: { id: 456 },
-            from: { id: 123 },
-            voice: { file_id: "voice-file-id" }
-          }
-        })
+      telegramWebhookRequest({
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          voice: { file_id: "voice-file-id" }
+        }
       })
     );
 
@@ -196,13 +205,10 @@ describe("telegram webhook route", () => {
 
   it("returns callback boundary data without applying draft actions", async () => {
     const response = await POST(
-      new Request("http://localhost/api/telegram/webhook", {
-        method: "POST",
-        body: JSON.stringify({
-          callback_query: {
-            data: "draft:draft-1:confirm"
-          }
-        })
+      telegramWebhookRequest({
+        callback_query: {
+          data: "draft:draft-1:confirm"
+        }
       })
     );
 
@@ -215,12 +221,7 @@ describe("telegram webhook route", () => {
   });
 
   it("ignores unknown updates", async () => {
-    const response = await POST(
-      new Request("http://localhost/api/telegram/webhook", {
-        method: "POST",
-        body: JSON.stringify({ update_id: 1 })
-      })
-    );
+    const response = await POST(telegramWebhookRequest({ update_id: 1 }));
 
     expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({ ok: true, ignored: true });
@@ -228,19 +229,102 @@ describe("telegram webhook route", () => {
 
   it("ignores messages from non-allowed Telegram users", async () => {
     const response = await POST(
-      new Request("http://localhost/api/telegram/webhook", {
-        method: "POST",
-        body: JSON.stringify({
-          message: {
-            chat: { id: 456 },
-            from: { id: 999 },
-            text: "Геворг должен 50000"
-          }
-        })
+      telegramWebhookRequest({
+        message: {
+          chat: { id: 456 },
+          from: { id: 999 },
+          text: "Геворг должен 50000"
+        }
       })
     );
 
     expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({ ok: true, ignored: true });
+  });
+
+  it("fails closed when webhook secret is not configured", async () => {
+    process.env.TELEGRAM_WEBHOOK_SECRET = "";
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+
+    const response = await POST(
+      telegramWebhookRequest({
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "Геворг должен 50000"
+        }
+      })
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "TELEGRAM_WEBHOOK_SECRET is required"
+    });
+    expectNoDownstreamCalls(fetcher);
+  });
+
+  it("rejects webhook secret mismatches before downstream processing", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+
+    const response = await POST(
+      telegramWebhookRequest(
+        {
+          message: {
+            chat: { id: 456 },
+            from: { id: 123 },
+            voice: { file_id: "voice-file-id" }
+          }
+        },
+        "wrong-secret"
+      )
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Telegram webhook secret mismatch"
+    });
+    expectNoDownstreamCalls(fetcher);
+  });
+
+  it("returns 400 for malformed json before downstream processing", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+
+    const response = await POST(
+      new Request("http://localhost/api/telegram/webhook", {
+        method: "POST",
+        headers: { "X-Telegram-Bot-Api-Secret-Token": "secret" },
+        body: "not json"
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Invalid Telegram webhook payload"
+    });
+    expectNoDownstreamCalls(fetcher);
+  });
+
+  it("returns 400 for schema-invalid payloads before downstream processing", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+
+    const response = await POST(
+      telegramWebhookRequest({
+        message: {
+          chat: { id: "456" },
+          from: { id: 123 },
+          text: "Геворг должен 50000"
+        }
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Invalid Telegram webhook payload"
+    });
+    expectNoDownstreamCalls(fetcher);
   });
 });
