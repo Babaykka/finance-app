@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ensureOwner } from "@/server/services/owner-service";
 
 describe("ensureOwner", () => {
-  it("creates an owner when none exists", async () => {
+  it("upserts the configured owner", async () => {
     const createdOwner = {
       id: "owner-1",
       telegramUserId: "tg-1",
@@ -12,8 +12,7 @@ describe("ensureOwner", () => {
     };
     const db = {
       owner: {
-        findUnique: vi.fn().mockResolvedValue(null),
-        create: vi.fn().mockResolvedValue(createdOwner)
+        upsert: vi.fn().mockResolvedValue(createdOwner)
       }
     };
 
@@ -22,16 +21,15 @@ describe("ensureOwner", () => {
       displayName: "Hrach"
     });
 
-    expect(db.owner.findUnique).toHaveBeenCalledWith({
-      where: { telegramUserId: "tg-1" }
-    });
-    expect(db.owner.create).toHaveBeenCalledWith({
-      data: { telegramUserId: "tg-1", displayName: "Hrach" }
+    expect(db.owner.upsert).toHaveBeenCalledWith({
+      where: { telegramUserId: "tg-1" },
+      update: {},
+      create: { telegramUserId: "tg-1", displayName: "Hrach" }
     });
     expect(owner).toBe(createdOwner);
   });
 
-  it("returns an existing owner without creating one", async () => {
+  it("does not overwrite an existing owner display name", async () => {
     const existingOwner = {
       id: "owner-1",
       telegramUserId: "tg-1",
@@ -41,8 +39,7 @@ describe("ensureOwner", () => {
     };
     const db = {
       owner: {
-        findUnique: vi.fn().mockResolvedValue(existingOwner),
-        create: vi.fn()
+        upsert: vi.fn().mockResolvedValue(existingOwner)
       }
     };
 
@@ -52,7 +49,10 @@ describe("ensureOwner", () => {
     });
 
     expect(owner).toBe(existingOwner);
-    expect(db.owner.create).not.toHaveBeenCalled();
+    expect(db.owner.upsert).toHaveBeenCalledWith({
+      where: { telegramUserId: "tg-1" },
+      update: {},
+      create: { telegramUserId: "tg-1", displayName: "Updated" }
+    });
   });
 });
-

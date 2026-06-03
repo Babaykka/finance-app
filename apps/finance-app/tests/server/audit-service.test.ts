@@ -66,4 +66,55 @@ describe("writeAuditLog", () => {
 
     expect(db.auditLog.create).not.toHaveBeenCalled();
   });
+
+  it("accepts nested JSON null values", async () => {
+    const db = {
+      auditLog: {
+        create: vi.fn().mockResolvedValue({ id: "audit-1" })
+      }
+    };
+
+    await writeAuditLog(db, {
+      ownerId: "owner-1",
+      actor: "owner",
+      source: "telegram_text",
+      entityType: "debt",
+      entityId: "debt-1",
+      oldValues: { status: null, payments: [null, { amount: 1000 }] },
+      newValues: { status: "scheduled" }
+    });
+
+    expect(db.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        oldValues: { status: null, payments: [null, { amount: 1000 }] },
+        newValues: { status: "scheduled" }
+      })
+    });
+  });
+
+  it.each([
+    ["Date", new Date("2026-06-03T00:00:00.000Z")],
+    ["undefined in object", { value: undefined }],
+    ["NaN", Number.NaN],
+    ["function", () => "nope"]
+  ])("rejects non-JSON audit values: %s", async (_label, oldValues) => {
+    const db = {
+      auditLog: {
+        create: vi.fn()
+      }
+    };
+
+    await expect(
+      writeAuditLog(db, {
+        ownerId: "owner-1",
+        actor: "owner",
+        source: "telegram_text",
+        entityType: "debt",
+        entityId: "debt-1",
+        oldValues
+      })
+    ).rejects.toThrow();
+
+    expect(db.auditLog.create).not.toHaveBeenCalled();
+  });
 });

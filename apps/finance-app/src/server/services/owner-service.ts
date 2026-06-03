@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
 type OwnerDb = {
-  owner: Pick<PrismaClient["owner"], "findUnique" | "create">;
+  owner: Pick<PrismaClient["owner"], "upsert">;
 };
 
 export type EnsureOwnerInput = {
@@ -12,16 +12,9 @@ export type EnsureOwnerInput = {
 export const ensureOwner = async (
   db: OwnerDb,
   { telegramUserId, displayName }: EnsureOwnerInput
-) => {
-  const existingOwner = await db.owner.findUnique({
-    where: { telegramUserId }
+) =>
+  db.owner.upsert({
+    where: { telegramUserId },
+    update: {},
+    create: { telegramUserId, displayName }
   });
-
-  if (existingOwner) {
-    return existingOwner;
-  }
-
-  return db.owner.create({
-    data: { telegramUserId, displayName }
-  });
-};
