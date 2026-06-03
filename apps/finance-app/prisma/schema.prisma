@@ -16,6 +16,9 @@ model Owner {
   storagePlaces StoragePlace[]
   debts         Debt[]
   payments      DebtPayment[]
+  majorMovements MajorMovement[]
+  expensePlans  ExpensePlan[]
+  decisions     Decision[]
   aiDrafts      AiDraft[]
   auditLogs     AuditLog[]
   exportJobs    ExportJob[]
@@ -68,6 +71,7 @@ model Debt {
 
   owner    Owner         @relation(fields: [ownerId], references: [id])
   payments DebtPayment[]
+  majorMovements MajorMovement[]
 
   @@index([ownerId, status])
   @@index([ownerId, type])
@@ -106,6 +110,13 @@ model MajorMovement {
   debtId    String?
   comment   String?
   createdAt DateTime @default(now())
+
+  owner Owner @relation(fields: [ownerId], references: [id])
+  debt  Debt? @relation(fields: [debtId], references: [id])
+
+  @@index([ownerId, date])
+  @@index([ownerId, type])
+  @@index([debtId])
 }
 
 model ExpensePlan {
@@ -119,6 +130,11 @@ model ExpensePlan {
   comment        String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  owner Owner @relation(fields: [ownerId], references: [id])
+
+  @@index([ownerId, period])
+  @@index([ownerId, status])
 }
 
 model Decision {
@@ -134,6 +150,11 @@ model Decision {
   comment       String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  owner Owner @relation(fields: [ownerId], references: [id])
+
+  @@index([ownerId, date])
+  @@index([ownerId, status])
 }
 
 model AiDraft {

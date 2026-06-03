@@ -1,13 +1,18 @@
-import { endOfMonth, format, parseISO } from "date-fns";
+import { endOfMonth, format, isValid, parseISO } from "date-fns";
+
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export function normalizeDateOnly(isoDate: string): string {
+  if (!DATE_ONLY_PATTERN.test(isoDate)) {
+    throw new Error(`Invalid date: ${isoDate}`);
+  }
   const parsed = parseISO(isoDate);
-  if (Number.isNaN(parsed.getTime())) {
+  if (!isValid(parsed)) {
     throw new Error(`Invalid date: ${isoDate}`);
   }
   return format(parsed, "yyyy-MM-dd");
 }
 
 export function endOfMonthIso(currentIsoDate: string): string {
-  return format(endOfMonth(parseISO(currentIsoDate)), "yyyy-MM-dd");
+  return format(endOfMonth(parseISO(normalizeDateOnly(currentIsoDate))), "yyyy-MM-dd");
 }
