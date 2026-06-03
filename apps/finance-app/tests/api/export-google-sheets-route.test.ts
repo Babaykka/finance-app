@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => {
   const debtFindMany = vi.fn();
   const debtPaymentFindMany = vi.fn();
   const exportJobCreate = vi.fn();
+  const exportJobUpdate = vi.fn();
   const getLocalOwner = vi.fn();
   const buildExportSnapshot = vi.fn();
   const exportTables = vi.fn();
@@ -16,12 +17,13 @@ const mocks = vi.hoisted(() => {
       storagePlace: { findMany: storagePlaceFindMany },
       debt: { findMany: debtFindMany },
       debtPayment: { findMany: debtPaymentFindMany },
-      exportJob: { create: exportJobCreate }
+      exportJob: { create: exportJobCreate, update: exportJobUpdate }
     },
     storagePlaceFindMany,
     debtFindMany,
     debtPaymentFindMany,
     exportJobCreate,
+    exportJobUpdate,
     getLocalOwner,
     buildExportSnapshot,
     exportTables,
@@ -68,6 +70,7 @@ describe("Google Sheets export route", () => {
     });
     mocks.createGoogleSheetsExportClient.mockReturnValue({ exportTables: mocks.exportTables });
     mocks.exportJobCreate.mockResolvedValue({ id: "export-job-1" });
+    mocks.exportJobUpdate.mockResolvedValue({ id: "export-job-1" });
   });
 
   afterEach(() => {
@@ -92,7 +95,7 @@ describe("Google Sheets export route", () => {
     expect(mocks.createGoogleSheetsExportClient).not.toHaveBeenCalled();
   });
 
-  it("exports owner-scoped snapshot tables and records the finished export job", async () => {
+  it("exports owner-scoped snapshot tables and records the export job lifecycle", async () => {
     const response = await POST();
 
     expect(mocks.storagePlaceFindMany).toHaveBeenCalledWith({
@@ -142,6 +145,15 @@ describe("Google Sheets export route", () => {
       data: {
         ownerId: "owner-1",
         target: "google_sheets",
+        status: "running"
+      }
+    });
+    expect(mocks.exportJobCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.exportTables.mock.invocationCallOrder[0]
+    );
+    expect(mocks.exportJobUpdate).toHaveBeenCalledWith({
+      where: { id: "export-job-1" },
+      data: {
         status: "finished",
         finishedAt: new Date("2026-06-03T12:00:00.000Z"),
         spreadsheetUrl: "https://docs.google.com/spreadsheets/d/sheet-1/edit"
@@ -150,6 +162,34 @@ describe("Google Sheets export route", () => {
     await expect(response.json()).resolves.toEqual({
       spreadsheetId: "sheet-1",
       spreadsheetUrl: "https://docs.google.com/spreadsheets/d/sheet-1/edit"
+    });
+  });
+
+  it("records a failed export job when the Google API call fails", async () => {
+    mocks.exportTables.mockRejectedValue(
+      new Error("Google Sheets values update failed with HTTP 429")
+    );
+
+    const response = await POST();
+
+    expect(response.status).toBe(502);
+    expect(mocks.exportJobCreate).toHaveBeenCalledWith({
+      data: {
+        ownerId: "owner-1",
+        target: "google_sheets",
+        status: "running"
+      }
+    });
+    expect(mocks.exportJobUpdate).toHaveBeenCalledWith({
+      where: { id: "export-job-1" },
+      data: {
+        status: "failed",
+        finishedAt: new Date("2026-06-03T12:00:00.000Z"),
+        error: "Google Sheets values update failed with HTTP 429"
+      }
+    });
+    await expect(response.json()).resolves.toEqual({
+      error: "Google Sheets export failed"
     });
   });
 });

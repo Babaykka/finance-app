@@ -12,7 +12,9 @@ const getRouteDependencies = async () => {
   return { prisma, getLocalOwner };
 };
 
-const readExportRows = async (prisma: Awaited<ReturnType<typeof getRouteDependencies>>["prisma"], ownerId: string) => {
+type RouteDependencies = Awaited<ReturnType<typeof getRouteDependencies>>;
+
+const readExportRows = async (prisma: RouteDependencies["prisma"], ownerId: string) => {
   return Promise.all([
     prisma.storagePlace.findMany({
       where: { ownerId },
@@ -45,6 +47,9 @@ const readExportRows = async (prisma: Awaited<ReturnType<typeof getRouteDependen
   ]);
 };
 
+const toErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : "Unknown Google Sheets export error";
+
 export async function POST() {
   const accessToken = process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
 
@@ -59,21 +64,41 @@ export async function POST() {
   const owner = await getLocalOwner();
   const [storagePlaces, debts, payments] = await readExportRows(prisma, owner.id);
   const tables = buildExportSnapshot({ storagePlaces, debts, payments });
-  const client = createGoogleSheetsExportClient({ accessToken, fetcher: fetch });
-  const exportResult = await client.exportTables({
-    title: `Финансы export ${dateToMoscowDateIso()}`,
-    tables
-  });
-
-  await prisma.exportJob.create({
+  const exportJob = await prisma.exportJob.create({
     data: {
       ownerId: owner.id,
       target: "google_sheets",
-      status: "finished",
-      finishedAt: new Date(),
-      spreadsheetUrl: exportResult.spreadsheetUrl
+      status: "running"
     }
   });
+  const client = createGoogleSheetsExportClient({ accessToken, fetcher: fetch });
 
-  return NextResponse.json(exportResult);
+  try {
+    const exportResult = await client.exportTables({
+      title: `Финансы export ${dateToMoscowDateIso()}`,
+      tables
+    });
+
+    await prisma.exportJob.update({
+      where: { id: exportJob.id },
+      data: {
+        status: "finished",
+        finishedAt: new Date(),
+        spreadsheetUrl: exportResult.spreadsheetUrl
+      }
+    });
+
+    return NextResponse.json(exportResult);
+  } catch (error) {
+    await prisma.exportJob.update({
+      where: { id: exportJob.id },
+      data: {
+        status: "failed",
+        finishedAt: new Date(),
+        error: toErrorMessage(error)
+      }
+    });
+
+    return NextResponse.json({ error: "Google Sheets export failed" }, { status: 502 });
+  }
 }

@@ -46,7 +46,7 @@ export function createGoogleSheetsExportClient(input: {
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            valueInputOption: "USER_ENTERED",
+            valueInputOption: "RAW",
             data: Object.entries(args.tables).map(([sheetName, values]) => ({
               range: toSheetRange(sheetName),
               majorDimension: "ROWS",

@@ -67,7 +67,7 @@ describe("createGoogleSheetsExportClient", () => {
       })
     );
     expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({
-      valueInputOption: "USER_ENTERED",
+      valueInputOption: "RAW",
       data: [
         {
           range: "'02 Места хранения'!A1",
@@ -81,6 +81,44 @@ describe("createGoogleSheetsExportClient", () => {
         }
       ]
     });
+  });
+
+  it("uses raw value input so formula-looking user strings are not executed", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          spreadsheetId: "sheet-1",
+          spreadsheetUrl: "https://docs.google.com/spreadsheets/d/sheet-1/edit"
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ totalUpdatedCells: 2 })
+      });
+
+    await createGoogleSheetsExportClient({ accessToken: "token", fetcher }).exportTables({
+      title: "Export",
+      tables: {
+        "03 Долги": [["Должник"], ["=IMPORTDATA(\"https://example.com\")"]]
+      }
+    });
+
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual(
+      expect.objectContaining({
+        valueInputOption: "RAW",
+        data: [
+          {
+            range: "'03 Долги'!A1",
+            majorDimension: "ROWS",
+            values: [["Должник"], ["=IMPORTDATA(\"https://example.com\")"]]
+          }
+        ]
+      })
+    );
   });
 
   it("escapes single quotes in sheet ranges", async () => {
