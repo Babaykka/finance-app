@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { SourceSchema } from "@/domain/enums";
 import { AiParseResultSchema } from "@/server/ai/schema";
+import type { ActionApplicationDb } from "@/server/services/action-application-service";
 
 const CONFIRMABLE_DRAFT_STATUSES = ["pending", "needs_clarification"] as const;
 
@@ -13,6 +14,20 @@ const getRouteDependencies = async () => {
 
   return { prisma, getLocalOwner, applyAiActions };
 };
+
+type ActionApplicationTransactionDb = {
+  storagePlace: NonNullable<ActionApplicationDb["storagePlace"]>;
+  debt: NonNullable<ActionApplicationDb["debt"]>;
+  debtPayment: NonNullable<ActionApplicationDb["debtPayment"]>;
+  auditLog: NonNullable<ActionApplicationDb["auditLog"]>;
+};
+
+const toActionApplicationDb = (tx: ActionApplicationTransactionDb): ActionApplicationDb => ({
+  storagePlace: tx.storagePlace,
+  debt: tx.debt,
+  debtPayment: tx.debtPayment,
+  auditLog: tx.auditLog
+});
 
 export async function POST(_: Request, context: { params: Promise<{ id: string }> }) {
   const { prisma, getLocalOwner, applyAiActions } = await getRouteDependencies();
@@ -42,7 +57,7 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
     });
 
     const parsed = AiParseResultSchema.parse(draft.parsedActions);
-    const applied = await applyAiActions(tx, {
+    const applied = await applyAiActions(toActionApplicationDb(tx), {
       ownerId: owner.id,
       actor: `telegram:${owner.telegramUserId}`,
       source: SourceSchema.parse(draft.source),

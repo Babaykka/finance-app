@@ -14,7 +14,12 @@ const tx = {
     findFirstOrThrow,
     updateMany,
     update
-  }
+  },
+  storagePlace: { create: vi.fn() },
+  debt: { create: vi.fn(), findFirstOrThrow: vi.fn(), update: vi.fn() },
+  debtPayment: { create: vi.fn() },
+  auditLog: { create: vi.fn() },
+  $transaction: vi.fn()
 };
 
 vi.mock("@/server/db", () => ({
@@ -88,7 +93,15 @@ describe("ai-drafts confirm route", () => {
     expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(
       applyAiActions.mock.invocationCallOrder[0]
     );
-    expect(applyAiActions).toHaveBeenCalledWith(tx, {
+    const [actionDb, actionInput] = applyAiActions.mock.calls[0];
+    expect(actionDb).toEqual({
+      storagePlace: tx.storagePlace,
+      debt: tx.debt,
+      debtPayment: tx.debtPayment,
+      auditLog: tx.auditLog
+    });
+    expect(actionDb).not.toHaveProperty("$transaction");
+    expect(actionInput).toEqual({
       ownerId: "owner-1",
       actor: "telegram:123",
       source: "telegram_text",
