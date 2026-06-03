@@ -3710,7 +3710,7 @@ git commit -m "docs: add finance app runbook"
 **Files:**
 - Modify only files required to fix issues found during verification.
 
-- [ ] **Step 1: Run repository-level tests**
+- [x] **Step 1: Run repository-level tests**
 
 Run existing spreadsheet tests:
 
@@ -3741,7 +3741,7 @@ typecheck exits 0
 Next build succeeds
 ```
 
-- [ ] **Step 2: Verify Git cleanliness**
+- [x] **Step 2: Verify Git cleanliness**
 
 Run:
 
@@ -3762,7 +3762,7 @@ git add <changed-files>
 git commit -m "chore: finalize finance app MVP"
 ```
 
-- [ ] **Step 3: Prepare handoff**
+- [x] **Step 3: Prepare handoff**
 
 Final response must include:
 
