@@ -1,6 +1,7 @@
 import { AlertTriangle, CircleDollarSign, HandCoins, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
+import { DataUnavailable } from "@/components/DataUnavailable";
 import { QuickAddPanel } from "@/components/QuickAddPanel";
 import { SummaryCard } from "@/components/SummaryCard";
 import { formatMoney } from "@/domain/money";
@@ -52,6 +53,7 @@ export default async function HomePage() {
             <h1>Обзор</h1>
           </div>
         </div>
+        {data.isReady ? null : <DataUnavailable />}
 
         <section className="overview-grid" aria-label="Сводка">
           <SummaryCard

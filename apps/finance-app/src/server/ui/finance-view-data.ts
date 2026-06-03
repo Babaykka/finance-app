@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { Asset } from "@/domain/enums";
+import type { Asset, AttentionPriority } from "@/domain/enums";
 
 export type AssetTotalView = {
   asset: Asset;
@@ -58,6 +58,12 @@ export type FinanceViewData = {
 };
 
 const ASSET_ORDER: Asset[] = ["RUB", "USDT", "AMD", "BTC", "ETH", "OTHER_CRYPTO"];
+const ATTENTION_PRIORITY_RANK: Record<AttentionPriority, number> = {
+  urgent: 3,
+  high: 2,
+  medium: 1,
+  low: 0
+};
 
 const EMPTY_VIEW_DATA: FinanceViewData = {
   isReady: false,
@@ -96,6 +102,25 @@ const getDraftSummary = (parsedActions: unknown) => {
 
 const sortAssetTotals = (totals: AssetTotalView[]) =>
   totals.sort((a, b) => ASSET_ORDER.indexOf(a.asset) - ASSET_ORDER.indexOf(b.asset));
+
+const getAttentionRank = (priority: string) =>
+  ATTENTION_PRIORITY_RANK[priority as AttentionPriority] ?? -1;
+
+export const sortStoragePlacesForView = (places: StoragePlaceView[]) =>
+  [...places].sort((left, right) => {
+    const rankDiff = getAttentionRank(right.attentionPriority) - getAttentionRank(left.attentionPriority);
+
+    if (rankDiff !== 0) {
+      return rankDiff;
+    }
+
+    return left.name.localeCompare(right.name, "ru");
+  });
+
+const isLocalViewSetupError = (error: unknown) =>
+  error instanceof Error &&
+  (error.message.includes("OWNER_TELEGRAM_USER_ID is required") ||
+    error.message.includes("DATABASE_URL"));
 
 export async function getFinanceViewData(): Promise<FinanceViewData> {
   try {
@@ -149,7 +174,7 @@ export async function getFinanceViewData(): Promise<FinanceViewData> {
       assetTotals: sortAssetTotals(
         [...assetAmountByCode.entries()].map(([asset, amount]) => ({ asset, amount }))
       ),
-      storagePlaces: storageView,
+      storagePlaces: sortStoragePlacesForView(storageView),
       debts: debts.map((debt) => ({
         id: debt.id,
         partyName: debt.partyName,
@@ -174,8 +199,13 @@ export async function getFinanceViewData(): Promise<FinanceViewData> {
         createdAt: draft.createdAt.toISOString()
       }))
     };
-  } catch {
-    return EMPTY_VIEW_DATA;
+  } catch (error) {
+    if (isLocalViewSetupError(error)) {
+      console.warn("Finance view data is unavailable:", error);
+      return EMPTY_VIEW_DATA;
+    }
+
+    throw error;
   }
 }
 

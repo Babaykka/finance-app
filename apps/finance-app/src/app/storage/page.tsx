@@ -1,5 +1,6 @@
 import { Percent, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { DataUnavailable } from "@/components/DataUnavailable";
 import { formatMoney } from "@/domain/money";
 import {
   getAvailabilityLabel,
@@ -10,15 +11,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const formatRate = (rate: number | null) => {
+export const formatStorageRate = (rate: number | null) => {
   if (rate === null) {
     return null;
   }
 
-  return new Intl.NumberFormat("ru-RU", {
-    maximumFractionDigits: 2,
-    style: "percent"
-  }).format(rate);
+  return `${new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 2
+  }).format(rate)}%`;
 };
 
 export default async function StoragePage() {
@@ -34,11 +34,12 @@ export default async function StoragePage() {
           </div>
           <ShieldCheck aria-hidden="true" size={24} />
         </div>
+        {data.isReady ? null : <DataUnavailable />}
 
         {data.storagePlaces.length > 0 ? (
           <div className="item-list">
             {data.storagePlaces.map((place) => {
-              const rate = formatRate(place.rate);
+              const rate = formatStorageRate(place.rate);
 
               return (
                 <article className="item-card" key={place.id}>

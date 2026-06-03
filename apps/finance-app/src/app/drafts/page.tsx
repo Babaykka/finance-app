@@ -1,5 +1,6 @@
 import { Sparkles } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { DataUnavailable } from "@/components/DataUnavailable";
 import { DraftCard } from "@/components/DraftCard";
 import { getFinanceViewData } from "@/server/ui/finance-view-data";
 
@@ -18,6 +19,7 @@ export default async function DraftsPage() {
           </div>
           <Sparkles aria-hidden="true" size={24} />
         </div>
+        {data.isReady ? null : <DataUnavailable />}
 
         {data.drafts.length > 0 ? (
           <div className="item-list">

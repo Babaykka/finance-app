@@ -1,5 +1,6 @@
 import { CalendarClock, HandCoins } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { DataUnavailable } from "@/components/DataUnavailable";
 import { formatMoney } from "@/domain/money";
 import { getDebtTypeLabel, getFinanceViewData, getStatusLabel } from "@/server/ui/finance-view-data";
 
@@ -42,6 +43,7 @@ export default async function DebtsPage() {
           </div>
           <HandCoins aria-hidden="true" size={24} />
         </div>
+        {data.isReady ? null : <DataUnavailable />}
 
         {data.debts.length > 0 ? (
           <div className="item-list">
