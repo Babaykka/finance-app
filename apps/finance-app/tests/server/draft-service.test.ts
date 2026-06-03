@@ -37,4 +37,31 @@ describe("createAiDraft", () => {
       })
     });
   });
+
+  it("stores empty action results as needs clarification", async () => {
+    const db = {
+      aiDraft: {
+        create: vi.fn().mockResolvedValue({ id: "draft-2", status: "needs_clarification" })
+      }
+    };
+
+    const draft = await createAiDraft(db as never, {
+      ownerId: "owner-1",
+      source: "telegram_text",
+      rawText: "непонятно",
+      parseResult: {
+        confidence: 0.4,
+        summary: "Не удалось определить финансовое действие.",
+        actions: [],
+        needsClarification: []
+      }
+    });
+
+    expect(draft.status).toBe("needs_clarification");
+    expect(db.aiDraft.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        status: "needs_clarification"
+      })
+    });
+  });
 });

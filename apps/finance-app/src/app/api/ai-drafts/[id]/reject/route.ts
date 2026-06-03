@@ -14,10 +14,21 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
   const owner = await getLocalOwner();
   const { id } = await context.params;
 
-  await prisma.aiDraft.updateMany({
-    where: { id, ownerId: owner.id },
+  const update = await prisma.aiDraft.updateMany({
+    where: {
+      id,
+      ownerId: owner.id,
+      status: { in: ["pending", "needs_clarification"] }
+    },
     data: { status: "rejected" }
   });
+
+  if (update.count === 0) {
+    return NextResponse.json(
+      { error: "Draft was not found or is no longer rejectable." },
+      { status: 404 }
+    );
+  }
 
   const draft = await prisma.aiDraft.findFirstOrThrow({
     where: { id, ownerId: owner.id }

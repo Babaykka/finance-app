@@ -21,7 +21,9 @@ const toPrismaJson = (parseResult: AiParseResult): Prisma.InputJsonValue =>
 export async function createAiDraft(db: DraftDb, rawInput: unknown) {
   const input = CreateAiDraftSchema.parse(rawInput);
   const status =
-    input.parseResult.needsClarification.length > 0 ? "needs_clarification" : "pending";
+    input.parseResult.needsClarification.length > 0 || input.parseResult.actions.length === 0
+      ? "needs_clarification"
+      : "pending";
 
   return db.aiDraft.create({
     data: {
