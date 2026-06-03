@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Owner {
+  id             String   @id @default(cuid())
+  telegramUserId String   @unique
+  displayName    String
+  settings       Json     @default("{}")
+  createdAt      DateTime @default(now())
+
+  storagePlaces StoragePlace[]
+  debts         Debt[]
+  payments      DebtPayment[]
+  aiDrafts      AiDraft[]
+  auditLogs     AuditLog[]
+  exportJobs    ExportJob[]
+}
+
+model StoragePlace {
+  id                 String   @id @default(cuid())
+  ownerId            String
+  name               String
+  type               String
+  subtype            String
+  holderContext      String
+  asset              String
+  amount             Decimal
+  amountKind         String   @default("exact")
+  availability       String
+  rate               Decimal?
+  interestRule       String?
+  interestPaymentDay Int?
+  reviewOrEndDate    DateTime?
+  lastCheckedAt      DateTime?
+  status             String
+  attentionPriority  String
+  comment            String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  owner Owner @relation(fields: [ownerId], references: [id])
+
+  @@index([ownerId, type])
+  @@index([ownerId, status])
+}
+
+model Debt {
+  id                 String   @id @default(cuid())
+  ownerId            String
+  partyName          String
+  type               String
+  basis              String
+  asset              String
+  originalAmount     Decimal
+  remainingAmount    Decimal
+  status             String
+  nextPaymentAmount  Decimal?
+  nextPaymentDate    DateTime?
+  attentionPriority  String
+  comment            String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  owner    Owner         @relation(fields: [ownerId], references: [id])
+  payments DebtPayment[]
+
+  @@index([ownerId, status])
+  @@index([ownerId, type])
+}
+
+model DebtPayment {
+  id          String   @id @default(cuid())
+  ownerId     String
+  debtId      String
+  recordType  String
+  paymentDate DateTime
+  amount      Decimal
+  asset       String
+  status      String
+  source      String
+  comment     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner Owner @relation(fields: [ownerId], references: [id])
+  debt  Debt  @relation(fields: [debtId], references: [id])
+
+  @@index([ownerId, paymentDate])
+  @@index([debtId, recordType])
+}
+
+model MajorMovement {
+  id        String   @id @default(cuid())
+  ownerId   String
+  date      DateTime
+  type      String
+  amount    Decimal
+  asset     String
+  fromPlace String?
+  toPlace   String?
+  debtId    String?
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+model ExpensePlan {
+  id             String   @id @default(cuid())
+  ownerId        String
+  period         String
+  asset          String
+  plannedAmount  Decimal
+  actualEstimate Decimal?
+  status         String
+  comment        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Decision {
+  id            String   @id @default(cuid())
+  ownerId       String
+  date          DateTime
+  area          String
+  action        String
+  reason        String
+  amountOrAsset String?
+  priority      String
+  status        String
+  comment       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AiDraft {
+  id            String   @id @default(cuid())
+  ownerId       String
+  source        String
+  rawText       String
+  transcript    String?
+  parsedActions Json
+  confidence    Decimal
+  status        String
+  error         String?
+  createdAt     DateTime @default(now())
+  confirmedAt   DateTime?
+
+  owner Owner @relation(fields: [ownerId], references: [id])
+
+  @@index([ownerId, status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  ownerId    String
+  actor      String
+  source     String
+  entityType String
+  entityId   String
+  oldValues  Json?
+  newValues  Json?
+  aiDraftId  String?
+  createdAt  DateTime @default(now())
+
+  owner Owner @relation(fields: [ownerId], references: [id])
+
+  @@index([ownerId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model ExportJob {
+  id             String    @id @default(cuid())
+  ownerId        String
+  target         String
+  status         String
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  spreadsheetUrl String?
+  error          String?
+
+  owner Owner @relation(fields: [ownerId], references: [id])
+}

@@ -10,7 +10,7 @@
     "test:watch": "vitest",
     "typecheck": "next typegen && tsc --noEmit",
     "prisma:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
+    "db:migrate": "node scripts/ensure-sqlite-db.mjs && prisma migrate dev",
     "db:reset": "prisma migrate reset --force"
   },
   "dependencies": {
