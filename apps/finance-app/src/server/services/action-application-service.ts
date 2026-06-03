@@ -9,7 +9,10 @@ import { createStoragePlace } from "@/server/services/storage-service";
 type StorageServiceDb = Parameters<typeof createStoragePlace>[0];
 type DebtServiceDb = Parameters<typeof createDebtWithOptionalPlan>[0];
 
-export type ActionApplicationDb = StorageServiceDb & Partial<DebtServiceDb>;
+export type ActionApplicationDb = Partial<StorageServiceDb> & Partial<DebtServiceDb>;
+type TransactionCapableActionApplicationDb = ActionApplicationDb & {
+  $transaction?<T>(fn: (tx: ActionApplicationDb) => Promise<T>): Promise<T>;
+};
 
 export type ApplyAiActionsInput = {
   ownerId: string;
@@ -25,9 +28,17 @@ export type AppliedAiActionResult =
 
 const dateOnlyToUtcDate = (dateOnly: string) => new Date(`${dateOnly}T00:00:00.000Z`);
 
+const requireStorageDb = (db: ActionApplicationDb): StorageServiceDb => {
+  if (!db.storagePlace || !db.auditLog) {
+    throw new Error("Storage action application requires storagePlace and auditLog db delegates");
+  }
+
+  return db as StorageServiceDb;
+};
+
 const requireDebtDb = (db: ActionApplicationDb): DebtServiceDb => {
-  if (!db.debt || !db.debtPayment) {
-    throw new Error("Debt action application requires debt and debtPayment db delegates");
+  if (!db.debt || !db.debtPayment || !db.auditLog) {
+    throw new Error("Debt action application requires debt, debtPayment, and auditLog db delegates");
   }
 
   return db as DebtServiceDb;
@@ -39,7 +50,7 @@ const applyAiAction = (
   action: AiAction
 ): Promise<AppliedAiActionResult> => {
   if (action.type === "create_storage_place") {
-    return createStoragePlace(db, {
+    return createStoragePlace(requireStorageDb(db), {
       ownerId: input.ownerId,
       actor: input.actor,
       source: input.source,
@@ -105,9 +116,13 @@ const applyAiAction = (
 };
 
 export async function applyAiActions(
-  db: ActionApplicationDb,
+  db: TransactionCapableActionApplicationDb,
   input: ApplyAiActionsInput
 ): Promise<AppliedAiActionResult[]> {
+  if (db.$transaction) {
+    return db.$transaction((tx) => applyAiActions(tx, input));
+  }
+
   const results: AppliedAiActionResult[] = [];
 
   for (const action of input.actions) {

@@ -20,17 +20,26 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
   const { id } = await context.params;
 
   const result = await prisma.$transaction(async (tx) => {
-    const draft = await tx.aiDraft.findFirst({
+    const confirmedAt = new Date();
+    const claim = await tx.aiDraft.updateMany({
       where: {
         id,
         ownerId: owner.id,
         status: { in: [...CONFIRMABLE_DRAFT_STATUSES] }
+      },
+      data: {
+        status: "confirmed",
+        confirmedAt
       }
     });
 
-    if (!draft) {
+    if (claim.count === 0) {
       return null;
     }
+
+    const draft = await tx.aiDraft.findFirstOrThrow({
+      where: { id, ownerId: owner.id }
+    });
 
     const parsed = AiParseResultSchema.parse(draft.parsedActions);
     const applied = await applyAiActions(tx, {
@@ -38,14 +47,6 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
       actor: `telegram:${owner.telegramUserId}`,
       source: SourceSchema.parse(draft.source),
       actions: parsed.actions
-    });
-
-    await tx.aiDraft.update({
-      where: { id },
-      data: {
-        status: "confirmed",
-        confirmedAt: new Date()
-      }
     });
 
     return { draftId: id, applied: applied.length };

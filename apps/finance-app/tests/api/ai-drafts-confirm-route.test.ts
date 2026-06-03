@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const transaction = vi.fn();
 const findFirst = vi.fn();
+const findFirstOrThrow = vi.fn();
+const updateMany = vi.fn();
 const update = vi.fn();
 const getLocalOwner = vi.fn();
 const applyAiActions = vi.fn();
@@ -9,6 +11,8 @@ const applyAiActions = vi.fn();
 const tx = {
   aiDraft: {
     findFirst,
+    findFirstOrThrow,
+    updateMany,
     update
   }
 };
@@ -55,7 +59,8 @@ describe("ai-drafts confirm route", () => {
       needsClarification: []
     };
 
-    findFirst.mockResolvedValue({
+    updateMany.mockResolvedValue({ count: 1 });
+    findFirstOrThrow.mockResolvedValue({
       id: "draft-1",
       ownerId: "owner-1",
       source: "telegram_text",
@@ -69,28 +74,32 @@ describe("ai-drafts confirm route", () => {
       params: Promise.resolve({ id: "draft-1" })
     });
 
-    expect(findFirst).toHaveBeenCalledWith({
+    expect(updateMany).toHaveBeenCalledWith({
       where: {
         id: "draft-1",
         ownerId: "owner-1",
         status: { in: ["pending", "needs_clarification"] }
-      }
+      },
+      data: { status: "confirmed", confirmedAt: expect.any(Date) }
     });
+    expect(findFirstOrThrow).toHaveBeenCalledWith({
+      where: { id: "draft-1", ownerId: "owner-1" }
+    });
+    expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      applyAiActions.mock.invocationCallOrder[0]
+    );
     expect(applyAiActions).toHaveBeenCalledWith(tx, {
       ownerId: "owner-1",
       actor: "telegram:123",
       source: "telegram_text",
       actions: parsedActions.actions
     });
-    expect(update).toHaveBeenCalledWith({
-      where: { id: "draft-1" },
-      data: { status: "confirmed", confirmedAt: expect.any(Date) }
-    });
+    expect(update).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({ draftId: "draft-1", applied: 1 });
   });
 
   it("returns 404 when the draft is missing or no longer confirmable", async () => {
-    findFirst.mockResolvedValue(null);
+    updateMany.mockResolvedValue({ count: 0 });
 
     const { POST } = await import("@/app/api/ai-drafts/[id]/confirm/route");
     const response = await POST(new Request("http://localhost"), {
@@ -98,7 +107,47 @@ describe("ai-drafts confirm route", () => {
     });
 
     expect(response.status).toBe(404);
+    expect(findFirstOrThrow).not.toHaveBeenCalled();
     expect(applyAiActions).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it("leaves the claim rolled back when action application fails", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+    findFirstOrThrow.mockResolvedValue({
+      id: "draft-3",
+      ownerId: "owner-1",
+      source: "telegram_text",
+      parsedActions: {
+        confidence: 0.92,
+        summary: "Создать место хранения.",
+        actions: [
+          {
+            type: "create_storage_place",
+            name: "Альфабанк Вероники",
+            storageType: "trusted_person",
+            subtype: "not_applicable",
+            holderContext: "Вероника",
+            asset: "RUB",
+            amount: 804000,
+            amountKind: "exact",
+            availability: "restricted",
+            attentionPriority: "high"
+          }
+        ],
+        needsClarification: []
+      }
+    });
+    applyAiActions.mockRejectedValue(new Error("apply failed"));
+
+    const { POST } = await import("@/app/api/ai-drafts/[id]/confirm/route");
+    await expect(
+      POST(new Request("http://localhost"), {
+        params: Promise.resolve({ id: "draft-3" })
+      })
+    ).rejects.toThrow("apply failed");
+
+    expect(updateMany).toHaveBeenCalledOnce();
+    expect(applyAiActions).toHaveBeenCalledOnce();
   });
 });
