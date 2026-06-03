@@ -3571,7 +3571,7 @@ git commit -m "feat: add Google Sheets export adapter"
 - Modify: `docs/finance-system-user-guide.md`
 - Create: `apps/finance-app/tests/readme-smoke.test.ts`
 
-- [ ] **Step 1: Write README smoke test**
+- [x] **Step 1: Write README smoke test**
 
 Create `apps/finance-app/tests/readme-smoke.test.ts`:
 
@@ -3591,7 +3591,7 @@ describe("README", () => {
 });
 ```
 
-- [ ] **Step 2: Create README**
+- [x] **Step 2: Create README**
 
 Create `apps/finance-app/README.md`:
 
@@ -3653,7 +3653,7 @@ AI создает только черновики. Запись в базу пр
 ```
 ```
 
-- [ ] **Step 3: Add user-guide bridge note**
+- [x] **Step 3: Add user-guide bridge note**
 
 Append to `docs/finance-system-user-guide.md`:
 
@@ -3663,7 +3663,7 @@ Append to `docs/finance-system-user-guide.md`:
 После запуска отдельного приложения база данных приложения становится источником правды. Google Sheets используется как экспорт и резервная копия по кнопке. Не редактируйте экспортированную таблицу как главный источник данных, если приложение уже запущено.
 ```
 
-- [ ] **Step 4: Run full local verification**
+- [x] **Step 4: Run full local verification**
 
 Run:
 
@@ -3692,7 +3692,7 @@ Open `http://localhost:3000` in the in-app browser. Verify:
 - storage/debts/drafts pages render;
 - the app is not a landing page.
 
-- [ ] **Step 5: Stop dev server and commit**
+- [x] **Step 5: Stop dev server and commit**
 
 Stop the dev server with `Ctrl-C`.
 
