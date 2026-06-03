@@ -70,6 +70,94 @@ describe("OpenAI parser adapter", () => {
     expect(result.actions[0]?.type).toBe("create_storage_place");
   });
 
+  it("normalizes loose payment responses into the required draft schema", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        actions: [
+          {
+            type: "record_debt_payment",
+            partyName: "Геворг",
+            amount: 10000,
+            asset: "RUB",
+            paidAt: "2026-06-03",
+            comment: "Частичный возврат."
+          }
+        ]
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "Геворг вернул 10000 рублей",
+      context: {
+        todayIso: "2026-06-03",
+        timezone: "Europe/Moscow",
+        knownDebts: [
+          {
+            id: "debt-1",
+            partyName: "Геворг",
+            remainingAmount: 50000,
+            asset: "RUB"
+          }
+        ],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result).toEqual({
+      confidence: 0.7,
+      summary: "AI создал черновик финансового действия.",
+      actions: [
+        {
+          type: "record_debt_payment",
+          partyName: "Геворг",
+          amount: 10000,
+          asset: "RUB",
+          paymentDate: "2026-06-03",
+          comment: "Частичный возврат."
+        }
+      ],
+      needsClarification: []
+    });
+  });
+
+  it("defaults loose payment dates to todayIso", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.8,
+        summary: "Зафиксировать возврат долга.",
+        actions: [
+          {
+            type: "record_debt_payment",
+            partyName: "Геворг",
+            amount: 10000,
+            asset: "RUB"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "Геворг вернул 10000 рублей",
+      context: {
+        todayIso: "2026-06-03",
+        timezone: "Europe/Moscow",
+        knownDebts: [],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions[0]).toEqual({
+      type: "record_debt_payment",
+      partyName: "Геворг",
+      amount: 10000,
+      asset: "RUB",
+      paymentDate: "2026-06-03"
+    });
+  });
+
   it("rejects missing response output text", async () => {
     const create = vi.fn().mockResolvedValue({ output_text: "" });
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
