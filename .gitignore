@@ -9,6 +9,7 @@ apps/finance-app/.env
 apps/finance-app/.env.local
 apps/finance-app/dev.db
 apps/finance-app/dev.db-journal
+apps/finance-app/render-build.db*
 apps/finance-app/prisma/dev.db
 apps/finance-app/prisma/dev.db-journal
 apps/finance-app/coverage/

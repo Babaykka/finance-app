@@ -24,7 +24,9 @@ async function main() {
   loadLocalEnv();
 
   const botToken = requireEnv("TELEGRAM_BOT_TOKEN");
-  const appBaseUrl = normalizeBaseUrl(optionalEnv("APP_BASE_URL") ?? DEFAULT_APP_BASE_URL);
+  const appBaseUrl = normalizeBaseUrl(
+    optionalEnv("APP_BASE_URL") ?? optionalEnv("RENDER_EXTERNAL_URL") ?? DEFAULT_APP_BASE_URL
+  );
   const webhookSecret = optionalEnv("TELEGRAM_WEBHOOK_SECRET");
   const menuText = optionalEnv("TELEGRAM_MENU_TEXT") ?? DEFAULT_MENU_TEXT;
 

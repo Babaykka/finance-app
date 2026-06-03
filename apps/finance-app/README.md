@@ -92,6 +92,24 @@ npm run telegram:setup
 
 Команда обновляет команды бота, ставит кнопку Mini App и настраивает webhook, если заполнен `TELEGRAM_WEBHOOK_SECRET`.
 
+## Деплой на Render
+
+В корне репозитория есть `render.yaml` для Render Blueprint:
+
+- сервис: Next.js web service;
+- база: SQLite-файл на постоянном диске `/var/data/finance.db`;
+- миграции: запускаются в `start:render` перед стартом Next;
+- Telegram: `initialDeployHook` запускает `telegram:setup`, ставит Mini App кнопку и webhook.
+
+При создании Blueprint в Render нужно заполнить секреты:
+
+- `OWNER_TELEGRAM_USER_ID`
+- `TELEGRAM_ALLOWED_USER_ID`
+- `TELEGRAM_BOT_TOKEN`
+- `OPENAI_API_KEY`
+
+`TELEGRAM_WEBHOOK_SECRET` генерируется Render автоматически. `APP_BASE_URL` можно не задавать на Render: `telegram:setup` использует `RENDER_EXTERNAL_URL`.
+
 ## Правила безопасности
 
 Не хранить seed phrases, приватные ключи, пароли, полные номера карт, полные номера счетов, точные адреса криптокошельков, паспортные данные и лишние персональные данные.

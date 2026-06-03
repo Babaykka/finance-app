@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: finance-app
+    runtime: node
+    plan: starter
+    region: frankfurt
+    branch: finance-app-mvp
+    rootDir: apps/finance-app
+    buildCommand: npm run build:render
+    startCommand: npm run start:render
+    initialDeployHook: npm run telegram:setup
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
+    disk:
+      name: finance-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 24.16.0
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        value: file:/var/data/finance.db
+      - key: OWNER_DISPLAY_NAME
+        value: Hrach
+      - key: OWNER_TELEGRAM_USER_ID
+        sync: false
+      - key: TELEGRAM_ALLOWED_USER_ID
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
+      - key: TELEGRAM_MENU_TEXT
+        value: Финансы
+      - key: OPENAI_API_KEY
+        sync: false
