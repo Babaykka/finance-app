@@ -1,8 +1,62 @@
 import { NextResponse } from "next/server";
+import { SourceSchema } from "@/domain/enums";
+import { AiParseResultSchema } from "@/server/ai/schema";
 
-export async function POST() {
-  return NextResponse.json(
-    { error: "Draft confirmation is disabled until Task 7 adds action application tests." },
-    { status: 501 }
-  );
+const CONFIRMABLE_DRAFT_STATUSES = ["pending", "needs_clarification"] as const;
+
+const getRouteDependencies = async () => {
+  const [{ prisma }, { getLocalOwner }, { applyAiActions }] = await Promise.all([
+    import("@/server/db"),
+    import("@/server/auth/local-owner"),
+    import("@/server/services/action-application-service")
+  ]);
+
+  return { prisma, getLocalOwner, applyAiActions };
+};
+
+export async function POST(_: Request, context: { params: Promise<{ id: string }> }) {
+  const { prisma, getLocalOwner, applyAiActions } = await getRouteDependencies();
+  const owner = await getLocalOwner();
+  const { id } = await context.params;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const draft = await tx.aiDraft.findFirst({
+      where: {
+        id,
+        ownerId: owner.id,
+        status: { in: [...CONFIRMABLE_DRAFT_STATUSES] }
+      }
+    });
+
+    if (!draft) {
+      return null;
+    }
+
+    const parsed = AiParseResultSchema.parse(draft.parsedActions);
+    const applied = await applyAiActions(tx, {
+      ownerId: owner.id,
+      actor: `telegram:${owner.telegramUserId}`,
+      source: SourceSchema.parse(draft.source),
+      actions: parsed.actions
+    });
+
+    await tx.aiDraft.update({
+      where: { id },
+      data: {
+        status: "confirmed",
+        confirmedAt: new Date()
+      }
+    });
+
+    return { draftId: id, applied: applied.length };
+  });
+
+  if (!result) {
+    return NextResponse.json(
+      { error: "Draft was not found or is no longer confirmable." },
+      { status: 404 }
+    );
+  }
+
+  return NextResponse.json(result);
 }
