@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 import { createOpenAiParser, getOpenAiClient } from "@/server/ai/openai-adapter";
 
 describe("OpenAI parser adapter", () => {
@@ -67,5 +68,63 @@ describe("OpenAI parser adapter", () => {
       ]
     });
     expect(result.actions[0]?.type).toBe("create_storage_place");
+  });
+
+  it("rejects missing response output text", async () => {
+    const create = vi.fn().mockResolvedValue({ output_text: "" });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    await expect(
+      parser.parseMessage({
+        text: "создай долг",
+        context: {
+          todayIso: "2026-06-03",
+          timezone: "Europe/Moscow",
+          knownDebts: [],
+          knownStoragePlaces: []
+        }
+      })
+    ).rejects.toThrow("OpenAI parser response output_text is required");
+  });
+
+  it("rejects non-json response output text with a stable error", async () => {
+    const create = vi.fn().mockResolvedValue({ output_text: "не json" });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    await expect(
+      parser.parseMessage({
+        text: "создай долг",
+        context: {
+          todayIso: "2026-06-03",
+          timezone: "Europe/Moscow",
+          knownDebts: [],
+          knownStoragePlaces: []
+        }
+      })
+    ).rejects.toThrow("OpenAI parser response must be valid JSON");
+  });
+
+  it("rejects schema-invalid json response output text", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.8,
+        summary: "",
+        actions: [],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    await expect(
+      parser.parseMessage({
+        text: "создай долг",
+        context: {
+          todayIso: "2026-06-03",
+          timezone: "Europe/Moscow",
+          knownDebts: [],
+          knownStoragePlaces: []
+        }
+      })
+    ).rejects.toBeInstanceOf(ZodError);
   });
 });

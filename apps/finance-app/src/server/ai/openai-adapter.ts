@@ -63,7 +63,15 @@ export function createOpenAiParser(client: OpenAiParserClient, model: string): A
         throw new Error("OpenAI parser response output_text is required");
       }
 
-      return parseAiJson(JSON.parse(response.output_text));
+      let parsedJson: unknown;
+
+      try {
+        parsedJson = JSON.parse(response.output_text);
+      } catch (error) {
+        throw new Error("OpenAI parser response must be valid JSON", { cause: error });
+      }
+
+      return parseAiJson(parsedJson);
     }
   };
 }
