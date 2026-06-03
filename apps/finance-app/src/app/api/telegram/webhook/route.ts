@@ -1,38 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { OpenAiTranscriptionClient } from "@/server/ai/transcription";
+import { processTelegramUpdate, TelegramUpdateSchema } from "@/server/telegram/update";
 
 const DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
-
-const TelegramMessageSchema = z.object({
-  chat: z.object({ id: z.number() }),
-  from: z.object({ id: z.number() }),
-  text: z.string().optional(),
-  voice: z.object({ file_id: z.string().min(1) }).optional()
-});
-
-const TelegramUpdateSchema = z.object({
-  message: TelegramMessageSchema.optional(),
-  callback_query: z
-    .object({
-      data: z.string().optional()
-    })
-    .optional()
-});
-
-type TelegramMessage = z.infer<typeof TelegramMessageSchema>;
 
 const getRouteDependencies = async () => {
   const [
     { getOpenAiClient },
     { transcribeAudioFile },
-    { buildTelegramDraftConfirmation, handleTelegramTextMessage },
-    { sendTelegramMessage },
+    { answerTelegramCallbackQuery, sendTelegramMessage },
     { downloadTelegramVoiceFile }
   ] = await Promise.all([
     import("@/server/ai/openai-adapter"),
     import("@/server/ai/transcription"),
-    import("@/server/telegram/bot"),
     import("@/server/telegram/client"),
     import("@/server/telegram/voice")
   ]);
@@ -40,8 +21,7 @@ const getRouteDependencies = async () => {
   return {
     getOpenAiClient,
     transcribeAudioFile,
-    buildTelegramDraftConfirmation,
-    handleTelegramTextMessage,
+    answerTelegramCallbackQuery,
     sendTelegramMessage,
     downloadTelegramVoiceFile
   };
@@ -54,13 +34,6 @@ const getRequiredBotToken = () => {
   }
 
   return botToken;
-};
-
-const getTelegramUserId = (message: TelegramMessage) => String(message.from.id);
-
-const isAllowedTelegramUser = (telegramUserId: string) => {
-  const allowedUserId = process.env.TELEGRAM_ALLOWED_USER_ID;
-  return !allowedUserId || allowedUserId === telegramUserId;
 };
 
 const validateWebhookSecret = (request: Request) => {
@@ -91,6 +64,25 @@ const postToParseMessage = async (request: Request, body: unknown) => {
   return parseResponse.json() as Promise<{ id: string; parsedActions: unknown }>;
 };
 
+const postToLocalRoute = async (request: Request, path: string) => {
+  const response = await fetch(new URL(path, request.url).toString(), {
+    method: "POST"
+  });
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    body = undefined;
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    body
+  };
+};
+
 export async function POST(request: Request) {
   const webhookSecretFailure = validateWebhookSecret(request);
   if (webhookSecretFailure) {
@@ -105,84 +97,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid Telegram webhook payload" }, { status: 400 });
   }
 
-  if (update.callback_query) {
-    return NextResponse.json({
-      ok: true,
-      handled: "callback",
-      callbackData: update.callback_query.data
-    });
-  }
+  const botToken = getRequiredBotToken();
+  const {
+    answerTelegramCallbackQuery,
+    downloadTelegramVoiceFile,
+    getOpenAiClient,
+    sendTelegramMessage,
+    transcribeAudioFile
+  } = await getRouteDependencies();
+  const result = await processTelegramUpdate({
+    update,
+    fetcher: fetch,
+    botToken,
+    allowedUserId: process.env.TELEGRAM_ALLOWED_USER_ID,
+    transcribeModel: process.env.OPENAI_TRANSCRIBE_MODEL ?? DEFAULT_TRANSCRIBE_MODEL,
+    parseMessage: (body) => postToParseMessage(request, body),
+    confirmDraft: (draftId) =>
+      postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/confirm`),
+    rejectDraft: (draftId) =>
+      postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/reject`),
+    sendTelegramMessage,
+    answerTelegramCallbackQuery,
+    downloadTelegramVoiceFile,
+    transcribeAudioFile: (client, input) => transcribeAudioFile(client, input),
+    getOpenAiClient: () => getOpenAiClient() as unknown as OpenAiTranscriptionClient
+  });
 
-  if (!update.message) {
-    return NextResponse.json({ ok: true, ignored: true });
-  }
-
-  const message = update.message;
-  const telegramUserId = getTelegramUserId(message);
-  if (!isAllowedTelegramUser(telegramUserId)) {
-    return NextResponse.json({ ok: true, ignored: true });
-  }
-
-  if (message.text) {
-    const botToken = getRequiredBotToken();
-    const { handleTelegramTextMessage, sendTelegramMessage } = await getRouteDependencies();
-    const botResponse = await handleTelegramTextMessage({
-      text: message.text,
-      telegramUserId,
-      createDraftFromText: async (text) =>
-        postToParseMessage(request, {
-          text,
-          source: "telegram_text"
-        })
-    });
-
-    await sendTelegramMessage({
-      fetcher: fetch,
-      botToken,
-      chatId: message.chat.id,
-      text: botResponse.text,
-      buttons: botResponse.buttons
-    });
-
-    return NextResponse.json({ ok: true, handled: "text" });
-  }
-
-  if (message.voice) {
-    const botToken = getRequiredBotToken();
-    const {
-      buildTelegramDraftConfirmation,
-      downloadTelegramVoiceFile,
-      getOpenAiClient,
-      sendTelegramMessage,
-      transcribeAudioFile
-    } = await getRouteDependencies();
-    const voiceFile = await downloadTelegramVoiceFile({
-      fetcher: fetch,
-      botToken,
-      fileId: message.voice.file_id
-    });
-    const transcript = await transcribeAudioFile(getOpenAiClient() as unknown as OpenAiTranscriptionClient, {
-      file: voiceFile,
-      model: process.env.OPENAI_TRANSCRIBE_MODEL ?? DEFAULT_TRANSCRIBE_MODEL,
-      language: "ru"
-    });
-    const draft = await postToParseMessage(request, {
-      text: transcript,
-      transcript,
-      source: "telegram_voice"
-    });
-    const botResponse = buildTelegramDraftConfirmation(draft);
-
-    await sendTelegramMessage({
-      fetcher: fetch,
-      botToken,
-      chatId: message.chat.id,
-      text: botResponse.text,
-      buttons: botResponse.buttons
-    });
-
-    return NextResponse.json({ ok: true, handled: "voice", telegramUserId });
-  }
-
-  return NextResponse.json({ ok: true, ignored: true });
+  return NextResponse.json(result);
 }

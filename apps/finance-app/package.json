@@ -11,7 +11,10 @@
     "typecheck": "next typegen && tsc --noEmit",
     "prisma:generate": "prisma generate",
     "db:migrate": "node scripts/ensure-sqlite-db.mjs && prisma migrate dev",
-    "db:reset": "prisma migrate reset --force"
+    "db:reset": "prisma migrate reset --force",
+    "bot:poll": "tsx scripts/telegram-poll.ts",
+    "bot:poll:once": "tsx scripts/telegram-poll.ts --once",
+    "telegram:setup": "tsx scripts/telegram-setup.ts"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.8.0",

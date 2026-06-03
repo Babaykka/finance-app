@@ -3,6 +3,7 @@ import { POST } from "@/app/api/telegram/webhook/route";
 
 const mocks = vi.hoisted(() => {
   const sendTelegramMessage = vi.fn();
+  const answerTelegramCallbackQuery = vi.fn();
   const downloadTelegramVoiceFile = vi.fn();
   const transcribeAudioFile = vi.fn();
   const getOpenAiClient = vi.fn();
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     sendTelegramMessage,
+    answerTelegramCallbackQuery,
     downloadTelegramVoiceFile,
     transcribeAudioFile,
     getOpenAiClient,
@@ -18,6 +20,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@/server/telegram/client", () => ({
+  answerTelegramCallbackQuery: mocks.answerTelegramCallbackQuery,
   sendTelegramMessage: mocks.sendTelegramMessage
 }));
 
@@ -43,6 +46,7 @@ const telegramWebhookRequest = (body: unknown, secret = "secret") =>
 const expectNoDownstreamCalls = (fetcher: ReturnType<typeof vi.fn>) => {
   expect(fetcher).not.toHaveBeenCalled();
   expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
+  expect(mocks.answerTelegramCallbackQuery).not.toHaveBeenCalled();
   expect(mocks.downloadTelegramVoiceFile).not.toHaveBeenCalled();
   expect(mocks.getOpenAiClient).not.toHaveBeenCalled();
   expect(mocks.transcribeAudioFile).not.toHaveBeenCalled();
@@ -203,20 +207,46 @@ describe("telegram webhook route", () => {
     });
   });
 
-  it("returns callback boundary data without applying draft actions", async () => {
+  it("confirms drafts from callback buttons", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({ draftId: "draft-1", applied: 1 })
+    });
+    vi.stubGlobal("fetch", fetcher);
+
     const response = await POST(
       telegramWebhookRequest({
         callback_query: {
+          id: "callback-1",
+          from: { id: 123 },
+          message: { chat: { id: 456 } },
           data: "draft:draft-1:confirm"
         }
       })
     );
 
-    expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledWith("http://localhost/api/ai-drafts/draft-1/confirm", {
+      method: "POST"
+    });
+    expect(mocks.answerTelegramCallbackQuery).toHaveBeenCalledWith({
+      fetcher,
+      botToken: "token",
+      callbackQueryId: "callback-1",
+      text: "Сохранено"
+    });
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Сохранено. Черновик применен к финансам.",
+      buttons: []
+    });
     await expect(response.json()).resolves.toEqual({
       ok: true,
       handled: "callback",
-      callbackData: "draft:draft-1:confirm"
+      callbackAction: "confirm",
+      draftId: "draft-1"
     });
   });
 
