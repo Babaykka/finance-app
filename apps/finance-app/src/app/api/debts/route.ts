@@ -37,9 +37,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const { nextPaymentDate, ...input } = CreateDebtApiSchema.parse(await request.json());
   const { prisma, getLocalOwner } = await getRouteDependencies();
   const owner = await getLocalOwner();
-  const { nextPaymentDate, ...input } = CreateDebtApiSchema.parse(await request.json());
   const created = await createDebtWithOptionalPlan(prisma, {
     ...input,
     ownerId: owner.id,

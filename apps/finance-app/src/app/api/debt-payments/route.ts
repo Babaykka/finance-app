@@ -21,9 +21,9 @@ const RecordDebtPaymentApiSchema = RecordPaymentSchema.omit({
 });
 
 export async function POST(request: Request) {
+  const { paymentDate, ...input } = RecordDebtPaymentApiSchema.parse(await request.json());
   const { prisma, getLocalOwner } = await getRouteDependencies();
   const owner = await getLocalOwner();
-  const { paymentDate, ...input } = RecordDebtPaymentApiSchema.parse(await request.json());
   const created = await recordDebtPayment(prisma, {
     ...input,
     ownerId: owner.id,
