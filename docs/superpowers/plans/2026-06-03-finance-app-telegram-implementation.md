@@ -3372,7 +3372,7 @@ git commit -m "feat: add current data import and export snapshot"
 - Create: `apps/finance-app/tests/export/google-sheets.test.ts`
 - Modify: `apps/finance-app/.env.example`
 
-- [ ] **Step 1: Write Google Sheets adapter test**
+- [x] **Step 1: Write Google Sheets adapter test**
 
 Create `apps/finance-app/tests/export/google-sheets.test.ts`:
 
@@ -3417,7 +3417,7 @@ describe("createGoogleSheetsExportClient", () => {
 });
 ```
 
-- [ ] **Step 2: Implement Google Sheets adapter**
+- [x] **Step 2: Implement Google Sheets adapter**
 
 Create `apps/finance-app/src/server/export/google-sheets.ts`:
 
@@ -3483,7 +3483,7 @@ export function createGoogleSheetsExportClient(input: {
 }
 ```
 
-- [ ] **Step 3: Add Google Sheets export route**
+- [x] **Step 3: Add Google Sheets export route**
 
 Create `apps/finance-app/src/app/api/export/google-sheets/route.ts`:
 
@@ -3530,7 +3530,7 @@ export async function POST() {
 }
 ```
 
-- [ ] **Step 4: Update env example**
+- [x] **Step 4: Update env example**
 
 Append to `apps/finance-app/.env.example`:
 
@@ -3538,7 +3538,7 @@ Append to `apps/finance-app/.env.example`:
 GOOGLE_OAUTH_ACCESS_TOKEN=""
 ```
 
-- [ ] **Step 5: Run checks and commit**
+- [x] **Step 5: Run checks and commit**
 
 Run:
 
