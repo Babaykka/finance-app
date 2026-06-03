@@ -158,6 +158,70 @@ describe("OpenAI parser adapter", () => {
     });
   });
 
+  it("normalizes loose debt creation responses into the required draft schema", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.74,
+        summary: "Создать два долга.",
+        actions: [
+          {
+            type: "create_debt",
+            partyName: "Даниил Мятный",
+            category: "заказ",
+            amount: 9000,
+            asset: "RUB",
+            dueDate: "2026-06-30"
+          },
+          {
+            type: "create_debt",
+            partyName: "Грно",
+            relationship: "друг",
+            amount: 15000,
+            asset: "RUB",
+            dueDate: "2026-06-30"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "долг даннил мятный 9000 руб до конца июня, заказ долг 15000 руб от Грно до конца июня, друг",
+      context: {
+        todayIso: "2026-06-04",
+        timezone: "Europe/Moscow",
+        knownDebts: [],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions).toEqual([
+      {
+        type: "create_debt",
+        partyName: "Даниил Мятный",
+        debtType: "work_receivable",
+        basis: "заказ",
+        amount: 9000,
+        asset: "RUB",
+        dueDate: "2026-06-30",
+        status: "scheduled",
+        attentionPriority: "medium"
+      },
+      {
+        type: "create_debt",
+        partyName: "Грно",
+        debtType: "personal_debt",
+        basis: "личный долг другу",
+        amount: 15000,
+        asset: "RUB",
+        dueDate: "2026-06-30",
+        status: "scheduled",
+        attentionPriority: "medium"
+      }
+    ]);
+  });
+
   it("rejects missing response output text", async () => {
     const create = vi.fn().mockResolvedValue({ output_text: "" });
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");

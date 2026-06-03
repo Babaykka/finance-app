@@ -12,6 +12,7 @@ const SYSTEM_PROMPT = [
   "6. Сохраняй суммы числами, валюты и enum-значения выбирай из переданного доменного смысла.",
   "7. Верхний JSON всегда должен содержать confidence, summary, actions, needsClarification.",
   "8. Для record_debt_payment всегда используй поле paymentDate, не paidAt/date.",
+  "9. Для create_debt всегда заполняй debtType, basis, status и attentionPriority.",
   "Формат ответа:",
   JSON.stringify({
     confidence: 0.9,
@@ -63,6 +64,126 @@ export function getOpenAiClient(): OpenAiParserClient {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const VALID_DEBT_TYPES = ["personal_debt", "work_receivable"] as const;
+const VALID_DEBT_STATUSES = [
+  "no_agreement",
+  "negotiating",
+  "scheduled",
+  "overdue",
+  "closed"
+] as const;
+const VALID_ATTENTION_PRIORITIES = ["low", "medium", "high", "urgent"] as const;
+
+const isOneOf = <T extends string>(value: unknown, values: readonly T[]): value is T =>
+  typeof value === "string" && values.includes(value as T);
+
+const getStringValues = (action: Record<string, unknown>) =>
+  Object.values(action)
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.toLocaleLowerCase("ru-RU"));
+
+const hasAny = (values: string[], needles: string[]) =>
+  values.some((value) => needles.some((needle) => value.includes(needle)));
+
+const normalizeDebtType = (action: Record<string, unknown>) => {
+  if (isOneOf(action.debtType, VALID_DEBT_TYPES)) {
+    return action.debtType;
+  }
+
+  const values = getStringValues(action);
+  if (hasAny(values, ["заказ", "работ", "клиент", "диплом", "проект", "услуг"])) {
+    return "work_receivable";
+  }
+
+  return "personal_debt";
+};
+
+const normalizeDebtBasis = (
+  action: Record<string, unknown>,
+  debtType: ReturnType<typeof normalizeDebtType>
+) => {
+  if (typeof action.basis === "string" && action.basis.trim().length > 0) {
+    return action.basis.trim();
+  }
+
+  const values = getStringValues(action);
+  if (hasAny(values, ["заказ"])) {
+    return "заказ";
+  }
+
+  if (hasAny(values, ["диплом"])) {
+    return "дипломная работа";
+  }
+
+  if (debtType === "work_receivable") {
+    return "заказ/работа";
+  }
+
+  if (hasAny(values, ["друг"])) {
+    return "личный долг другу";
+  }
+
+  return "личный долг";
+};
+
+const normalizeDebtStatus = (action: Record<string, unknown>) => {
+  if (isOneOf(action.status, VALID_DEBT_STATUSES)) {
+    return action.status;
+  }
+
+  const values = getStringValues(action);
+  if (hasAny(values, ["закры", "оплачен", "вернул", "paid", "closed"])) {
+    return "closed";
+  }
+
+  if (hasAny(values, ["просроч", "overdue"])) {
+    return "overdue";
+  }
+
+  if (hasAny(values, ["договор", "обсуд", "negotiat"])) {
+    return "negotiating";
+  }
+
+  if (typeof action.dueDate === "string" || action.nextPaymentAmount !== undefined) {
+    return "scheduled";
+  }
+
+  return "no_agreement";
+};
+
+const normalizeAttentionPriority = (action: Record<string, unknown>) => {
+  if (isOneOf(action.attentionPriority, VALID_ATTENTION_PRIORITIES)) {
+    return action.attentionPriority;
+  }
+
+  const values = getStringValues(action);
+  if (hasAny(values, ["сроч", "urgent"])) {
+    return "urgent";
+  }
+
+  if (hasAny(values, ["важ", "high"])) {
+    return "high";
+  }
+
+  if (hasAny(values, ["низ", "low"])) {
+    return "low";
+  }
+
+  return "medium";
+};
+
+const normalizeCreateDebtAction = (action: Record<string, unknown>) => {
+  const debtType = normalizeDebtType(action);
+
+  return {
+    ...action,
+    debtType,
+    basis: normalizeDebtBasis(action, debtType),
+    status: normalizeDebtStatus(action),
+    attentionPriority: normalizeAttentionPriority(action)
+  };
+};
+
 function normalizeLooseParserJson(json: unknown, todayIso: string): unknown {
   if (!isRecord(json)) {
     return json;
@@ -70,15 +191,21 @@ function normalizeLooseParserJson(json: unknown, todayIso: string): unknown {
 
   const actions = Array.isArray(json.actions)
     ? json.actions.map((action) => {
-        if (!isRecord(action) || action.type !== "record_debt_payment") {
+        if (!isRecord(action)) {
           return action;
         }
 
-        const paymentDate = action.paymentDate ?? action.paidAt ?? action.date ?? todayIso;
+        if (action.type === "create_debt") {
+          return normalizeCreateDebtAction(action);
+        }
+
+        if (action.type !== "record_debt_payment") {
+          return action;
+        }
 
         return {
           ...action,
-          paymentDate
+          paymentDate: action.paymentDate ?? action.paidAt ?? action.date ?? todayIso
         };
       })
     : json.actions;
