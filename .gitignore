@@ -3,3 +3,10 @@
 dist/
 __pycache__/
 *.pyc
+apps/finance-app/node_modules/
+apps/finance-app/.next/
+apps/finance-app/.env
+apps/finance-app/.env.local
+apps/finance-app/prisma/dev.db
+apps/finance-app/prisma/dev.db-journal
+apps/finance-app/coverage/
