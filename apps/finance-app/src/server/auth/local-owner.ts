@@ -5,7 +5,7 @@ export async function getLocalOwner() {
   const telegramUserId = process.env.OWNER_TELEGRAM_USER_ID;
 
   if (!telegramUserId) {
-    throw new Error("OWNER_TELEGRAM_USER_ID is required");
+    throw new Error("OWNER_TELEGRAM_USER_ID is required for local MVP");
   }
 
   return ensureOwner(prisma, {
