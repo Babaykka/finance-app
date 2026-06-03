@@ -47,13 +47,24 @@ export async function sendTelegramMessage(input: {
   fetcher: Fetcher;
   botToken: string;
   chatId: number;
+  messageThreadId?: number;
+  directMessagesTopicId?: number;
   text: string;
   buttons: TelegramInlineButton[];
 }) {
   const body: Record<string, unknown> = {
-    chat_id: input.chatId,
-    text: input.text
+    chat_id: input.chatId
   };
+
+  if (input.messageThreadId !== undefined) {
+    body.message_thread_id = input.messageThreadId;
+  }
+
+  if (input.directMessagesTopicId !== undefined) {
+    body.direct_messages_topic_id = input.directMessagesTopicId;
+  }
+
+  body.text = input.text;
 
   if (input.buttons.length > 0) {
     body.reply_markup = {

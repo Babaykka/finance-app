@@ -29,6 +29,101 @@ describe("parseDraftCallbackData", () => {
 });
 
 describe("processTelegramUpdate", () => {
+  it("keeps text replies in the same Telegram topic", async () => {
+    const dependencies = createDependencies();
+    dependencies.parseMessage.mockResolvedValue({
+      id: "draft-topic",
+      parsedActions: { summary: "Создать долг." }
+    });
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          message_thread_id: 1620865,
+          text: "долг Грно 15000"
+        }
+      }
+    });
+
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      messageThreadId: 1620865,
+      text: "Черновик: Создать долг.",
+      buttons: [
+        { text: "Сохранить", callbackData: "draft:draft-topic:confirm" },
+        { text: "Исправить", callbackData: "draft:draft-topic:edit" },
+        { text: "Отмена", callbackData: "draft:draft-topic:reject" }
+      ]
+    });
+    expect(result).toEqual({ ok: true, handled: "text" });
+  });
+
+  it("uses direct message topic ids for private Telegram topic replies", async () => {
+    const dependencies = createDependencies();
+    dependencies.parseMessage.mockResolvedValue({
+      id: "draft-private-topic",
+      parsedActions: { summary: "Создать долг." }
+    });
+
+    await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        message: {
+          chat: { id: 456, type: "private" },
+          from: { id: 123 },
+          message_thread_id: 1620865,
+          is_topic_message: true,
+          text: "долг Грно 15000"
+        }
+      }
+    });
+
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      directMessagesTopicId: 1620865,
+      text: "Черновик: Создать долг.",
+      buttons: [
+        { text: "Сохранить", callbackData: "draft:draft-private-topic:confirm" },
+        { text: "Исправить", callbackData: "draft:draft-private-topic:edit" },
+        { text: "Отмена", callbackData: "draft:draft-private-topic:reject" }
+      ]
+    });
+  });
+
+  it("answers /start without sending the command to the AI parser", async () => {
+    const dependencies = createDependencies();
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          message_thread_id: 1620850,
+          text: "/start"
+        }
+      }
+    });
+
+    expect(dependencies.parseMessage).not.toHaveBeenCalled();
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      messageThreadId: 1620850,
+      text: expect.stringContaining("Напиши финансовое событие"),
+      buttons: []
+    });
+    expect(result).toEqual({ ok: true, handled: "command", command: "start" });
+  });
+
   it("confirms a draft from an inline callback button and replies in Telegram", async () => {
     const dependencies = createDependencies();
     dependencies.confirmDraft.mockResolvedValue({

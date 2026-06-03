@@ -4,7 +4,8 @@ import type { OpenAiTranscriptionClient } from "@/server/ai/transcription";
 const DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
 
 const TelegramChatSchema = z.object({
-  id: z.number()
+  id: z.number(),
+  type: z.string().optional()
 });
 
 const TelegramUserSchema = z.object({
@@ -14,6 +15,7 @@ const TelegramUserSchema = z.object({
 const TelegramMessageSchema = z.object({
   chat: TelegramChatSchema,
   from: TelegramUserSchema,
+  message_thread_id: z.number().optional(),
   text: z.string().optional(),
   voice: z.object({ file_id: z.string().min(1) }).optional()
 });
@@ -23,7 +25,8 @@ const TelegramCallbackQuerySchema = z.object({
   from: TelegramUserSchema,
   message: z
     .object({
-      chat: TelegramChatSchema
+      chat: TelegramChatSchema,
+      message_thread_id: z.number().optional()
     })
     .optional(),
   data: z.string().optional()
@@ -74,6 +77,8 @@ type ProcessTelegramUpdateInput = {
     fetcher: Fetcher;
     botToken: string;
     chatId: number;
+    messageThreadId?: number;
+    directMessagesTopicId?: number;
     text: string;
     buttons: TelegramInlineButton[];
   }) => Promise<void>;
@@ -100,6 +105,12 @@ type DraftCallbackAction = (typeof CALLBACK_ACTIONS)[number];
 
 const isAllowedTelegramUser = (telegramUserId: string, allowedUserId?: string) =>
   !allowedUserId || allowedUserId === telegramUserId;
+
+const HELP_TEXT = [
+  "Напиши финансовое событие обычным текстом или голосом.",
+  "Например: долг Грно 15000 руб до конца июня, друг.",
+  "Я создам черновик, а ты подтвердишь его кнопкой."
+].join("\n");
 
 const buildDraftButtons = (draftId: string): TelegramInlineButton[] => [
   { text: "Сохранить", callbackData: `draft:${draftId}:confirm` },
@@ -128,6 +139,41 @@ function buildTelegramDraftConfirmation(draft: DraftResult) {
   };
 }
 
+const getCommand = (text: string) => {
+  const normalized = text.trim().toLocaleLowerCase("ru-RU");
+  const command = normalized.split(/\s+/)[0]?.split("@")[0];
+
+  if (command === "/start") {
+    return "start";
+  }
+
+  if (command === "/help") {
+    return "help";
+  }
+
+  return null;
+};
+
+const topicTarget = (chat: { id: number; type?: string }, messageThreadId?: number) => ({
+  chatId: chat.id,
+  ...(messageThreadId !== undefined
+    ? chat.type === "private"
+      ? { directMessagesTopicId: messageThreadId }
+      : { messageThreadId }
+    : {})
+});
+
+const messageTarget = (message: TelegramMessage) =>
+  topicTarget(message.chat, message.message_thread_id);
+
+const callbackMessageTarget = (callback: TelegramCallbackQuery) => {
+  if (!callback.message) {
+    return null;
+  }
+
+  return topicTarget(callback.message.chat, callback.message.message_thread_id);
+};
+
 export function parseDraftCallbackData(value: string | undefined) {
   if (!value) {
     return null;
@@ -150,6 +196,19 @@ export function parseDraftCallbackData(value: string | undefined) {
 }
 
 async function processTextMessage(input: ProcessTelegramUpdateInput, message: TelegramMessage) {
+  const command = getCommand(message.text ?? "");
+  if (command) {
+    await input.sendTelegramMessage({
+      fetcher: input.fetcher,
+      botToken: input.botToken,
+      ...messageTarget(message),
+      text: HELP_TEXT,
+      buttons: []
+    });
+
+    return { ok: true, handled: "command" as const, command };
+  }
+
   const draft = await input.parseMessage({
     text: message.text ?? "",
     source: "telegram_text"
@@ -159,7 +218,7 @@ async function processTextMessage(input: ProcessTelegramUpdateInput, message: Te
   await input.sendTelegramMessage({
     fetcher: input.fetcher,
     botToken: input.botToken,
-    chatId: message.chat.id,
+    ...messageTarget(message),
     text: response.text,
     buttons: response.buttons
   });
@@ -193,7 +252,7 @@ async function processVoiceMessage(input: ProcessTelegramUpdateInput, message: T
   await input.sendTelegramMessage({
     fetcher: input.fetcher,
     botToken: input.botToken,
-    chatId: message.chat.id,
+    ...messageTarget(message),
     text: response.text,
     buttons: response.buttons
   });
@@ -213,11 +272,12 @@ async function notifyDraftMutationFailure(
     text
   });
 
-  if (callback.message) {
+  const target = callbackMessageTarget(callback);
+  if (target) {
     await input.sendTelegramMessage({
       fetcher: input.fetcher,
       botToken: input.botToken,
-      chatId: callback.message.chat.id,
+      ...target,
       text,
       buttons: []
     });
@@ -249,11 +309,12 @@ async function processCallbackQuery(
       text: "Ок"
     });
 
-    if (callback.message) {
+    const target = callbackMessageTarget(callback);
+    if (target) {
       await input.sendTelegramMessage({
         fetcher: input.fetcher,
         botToken: input.botToken,
-        chatId: callback.message.chat.id,
+        ...target,
         text: "Отправь исправленную формулировку новым сообщением, я создам новый черновик.",
         buttons: []
       });
@@ -303,11 +364,12 @@ async function processCallbackQuery(
     text: answerText
   });
 
-  if (callback.message) {
+  const target = callbackMessageTarget(callback);
+  if (target) {
     await input.sendTelegramMessage({
       fetcher: input.fetcher,
       botToken: input.botToken,
-      chatId: callback.message.chat.id,
+      ...target,
       text: messageText,
       buttons: []
     });

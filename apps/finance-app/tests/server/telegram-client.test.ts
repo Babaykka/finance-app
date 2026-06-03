@@ -84,6 +84,58 @@ describe("sendTelegramMessage", () => {
       })
     });
   });
+
+  it("sends replies into the same Telegram topic when messageThreadId is present", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200
+    });
+
+    await sendTelegramMessage({
+      fetcher,
+      botToken: "token",
+      chatId: 123,
+      messageThreadId: 456,
+      text: "Черновик",
+      buttons: []
+    });
+
+    expect(fetcher).toHaveBeenCalledWith("https://api.telegram.org/bottoken/sendMessage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: 123,
+        message_thread_id: 456,
+        text: "Черновик"
+      })
+    });
+  });
+
+  it("sends replies into a private direct-message topic", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200
+    });
+
+    await sendTelegramMessage({
+      fetcher,
+      botToken: "token",
+      chatId: 123,
+      directMessagesTopicId: 456,
+      text: "Черновик",
+      buttons: []
+    });
+
+    expect(fetcher).toHaveBeenCalledWith("https://api.telegram.org/bottoken/sendMessage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: 123,
+        direct_messages_topic_id: 456,
+        text: "Черновик"
+      })
+    });
+  });
 });
 
 describe("Telegram Bot API helpers", () => {
