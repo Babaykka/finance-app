@@ -17,6 +17,7 @@
     "@prisma/client": "latest",
     "clsx": "latest",
     "date-fns": "latest",
+    "lucide-react": "^1.17.0",
     "next": "latest",
     "openai": "latest",
     "react": "latest",

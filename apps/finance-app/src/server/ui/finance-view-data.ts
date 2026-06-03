@@ -1,0 +1,234 @@
+import { Prisma } from "@prisma/client";
+import type { Asset } from "@/domain/enums";
+
+export type AssetTotalView = {
+  asset: Asset;
+  amount: number;
+};
+
+export type StoragePlaceView = {
+  id: string;
+  name: string;
+  type: string;
+  subtype: string;
+  holderContext: string;
+  asset: Asset;
+  amount: number;
+  amountKind: string;
+  availability: string;
+  rate: number | null;
+  interestPaymentDay: number | null;
+  status: string;
+  attentionPriority: string;
+  comment: string | null;
+};
+
+export type DebtView = {
+  id: string;
+  partyName: string;
+  type: string;
+  basis: string;
+  asset: Asset;
+  originalAmount: number;
+  remainingAmount: number;
+  status: string;
+  nextPaymentAmount: number | null;
+  nextPaymentDate: string | null;
+  attentionPriority: string;
+  comment: string | null;
+};
+
+export type DraftView = {
+  id: string;
+  source: string;
+  rawText: string;
+  summary: string;
+  confidence: number;
+  status: string;
+  createdAt: string;
+};
+
+export type FinanceViewData = {
+  isReady: boolean;
+  ownerName: string;
+  assetTotals: AssetTotalView[];
+  storagePlaces: StoragePlaceView[];
+  debts: DebtView[];
+  drafts: DraftView[];
+};
+
+const ASSET_ORDER: Asset[] = ["RUB", "USDT", "AMD", "BTC", "ETH", "OTHER_CRYPTO"];
+
+const EMPTY_VIEW_DATA: FinanceViewData = {
+  isReady: false,
+  ownerName: "Hrach",
+  assetTotals: [],
+  storagePlaces: [],
+  debts: [],
+  drafts: []
+};
+
+const toNumber = (value: unknown) => Number(new Prisma.Decimal(value as Prisma.Decimal.Value));
+
+const toAsset = (value: string): Asset => {
+  if (ASSET_ORDER.includes(value as Asset)) {
+    return value as Asset;
+  }
+
+  return "OTHER_CRYPTO";
+};
+
+const toIsoDate = (value: Date | null) => (value ? value.toISOString().slice(0, 10) : null);
+
+const getDraftSummary = (parsedActions: unknown) => {
+  if (
+    typeof parsedActions === "object" &&
+    parsedActions !== null &&
+    "summary" in parsedActions &&
+    typeof parsedActions.summary === "string" &&
+    parsedActions.summary.trim().length > 0
+  ) {
+    return parsedActions.summary;
+  }
+
+  return "Проверь действие перед сохранением";
+};
+
+const sortAssetTotals = (totals: AssetTotalView[]) =>
+  totals.sort((a, b) => ASSET_ORDER.indexOf(a.asset) - ASSET_ORDER.indexOf(b.asset));
+
+export async function getFinanceViewData(): Promise<FinanceViewData> {
+  try {
+    const [{ getLocalOwner }, { prisma }] = await Promise.all([
+      import("@/server/auth/local-owner"),
+      import("@/server/db")
+    ]);
+    const owner = await getLocalOwner();
+    const [storagePlaces, debts, drafts] = await prisma.$transaction([
+      prisma.storagePlace.findMany({
+        where: { ownerId: owner.id, status: { not: "closed" } },
+        orderBy: [{ attentionPriority: "desc" }, { name: "asc" }]
+      }),
+      prisma.debt.findMany({
+        where: { ownerId: owner.id, status: { not: "closed" } },
+        orderBy: [{ nextPaymentDate: "asc" }, { partyName: "asc" }]
+      }),
+      prisma.aiDraft.findMany({
+        where: { ownerId: owner.id, status: { in: ["pending", "needs_clarification"] } },
+        orderBy: { createdAt: "desc" }
+      })
+    ]);
+
+    const assetAmountByCode = new Map<Asset, number>();
+    const storageView = storagePlaces.map((place) => {
+      const asset = toAsset(place.asset);
+      const amount = toNumber(place.amount);
+      assetAmountByCode.set(asset, (assetAmountByCode.get(asset) ?? 0) + amount);
+
+      return {
+        id: place.id,
+        name: place.name,
+        type: place.type,
+        subtype: place.subtype,
+        holderContext: place.holderContext,
+        asset,
+        amount,
+        amountKind: place.amountKind,
+        availability: place.availability,
+        rate: place.rate === null ? null : toNumber(place.rate),
+        interestPaymentDay: place.interestPaymentDay,
+        status: place.status,
+        attentionPriority: place.attentionPriority,
+        comment: place.comment
+      };
+    });
+
+    return {
+      isReady: true,
+      ownerName: owner.displayName,
+      assetTotals: sortAssetTotals(
+        [...assetAmountByCode.entries()].map(([asset, amount]) => ({ asset, amount }))
+      ),
+      storagePlaces: storageView,
+      debts: debts.map((debt) => ({
+        id: debt.id,
+        partyName: debt.partyName,
+        type: debt.type,
+        basis: debt.basis,
+        asset: toAsset(debt.asset),
+        originalAmount: toNumber(debt.originalAmount),
+        remainingAmount: toNumber(debt.remainingAmount),
+        status: debt.status,
+        nextPaymentAmount: debt.nextPaymentAmount === null ? null : toNumber(debt.nextPaymentAmount),
+        nextPaymentDate: toIsoDate(debt.nextPaymentDate),
+        attentionPriority: debt.attentionPriority,
+        comment: debt.comment
+      })),
+      drafts: drafts.map((draft) => ({
+        id: draft.id,
+        source: draft.source,
+        rawText: draft.rawText,
+        summary: getDraftSummary(draft.parsedActions),
+        confidence: toNumber(draft.confidence),
+        status: draft.status,
+        createdAt: draft.createdAt.toISOString()
+      }))
+    };
+  } catch {
+    return EMPTY_VIEW_DATA;
+  }
+}
+
+export function getStorageTypeLabel(type: string, subtype: string) {
+  if (type === "income_bank_product" && subtype === "savings_account") {
+    return "Накопительный счет";
+  }
+
+  if (type === "income_bank_product" && subtype === "deposit") {
+    return "Вклад";
+  }
+
+  const labels: Record<string, string> = {
+    bank_account: "Банковский счет",
+    cash: "Наличные",
+    crypto_exchange: "Криптобиржа",
+    crypto_wallet: "Криптокошелек",
+    trusted_person: "У знакомого",
+    investment: "Инвестиции",
+    other: "Другое"
+  };
+
+  return labels[type] ?? type;
+}
+
+export function getDebtTypeLabel(type: string) {
+  return type === "work_receivable" ? "Работа" : "Личный долг";
+}
+
+export function getStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    active: "Активно",
+    check: "Проверить",
+    move: "Переложить",
+    closed: "Закрыто",
+    no_agreement: "Без договоренности",
+    negotiating: "Договориться",
+    scheduled: "По графику",
+    overdue: "Просрочено",
+    pending: "Ожидает",
+    needs_clarification: "Нужно уточнить"
+  };
+
+  return labels[status] ?? status;
+}
+
+export function getAvailabilityLabel(availability: string) {
+  const labels: Record<string, string> = {
+    immediate: "Сразу",
+    delayed: "С задержкой",
+    restricted: "Ограничено",
+    locked_until_date: "До даты"
+  };
+
+  return labels[availability] ?? availability;
+}
