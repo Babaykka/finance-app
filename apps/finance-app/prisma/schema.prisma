@@ -50,6 +50,7 @@ model StoragePlace {
 
   @@index([ownerId, type])
   @@index([ownerId, status])
+  @@unique([ownerId, name])
 }
 
 model Debt {
@@ -75,6 +76,7 @@ model Debt {
 
   @@index([ownerId, status])
   @@index([ownerId, type])
+  @@unique([ownerId, partyName, basis])
 }
 
 model DebtPayment {

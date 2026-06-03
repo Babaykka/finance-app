@@ -23,6 +23,12 @@ describe("buildCurrentFinanceSeed", () => {
         (debt) => debt.partyName === "Степан Гаврилюк" && debt.nextPaymentDate === "2026-06-03"
       )
     ).toBe(true);
+    expect(seed.storagePlaces.find((place) => place.name === "Тбанк накопительный счет")?.rate).toBe(
+      7
+    );
+    expect(seed.storagePlaces.find((place) => place.name === "Сбер накопительный счет")?.rate).toBe(
+      6.5
+    );
   });
 
   it("matches audited service input schemas when owner metadata is added", () => {

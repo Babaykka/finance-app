@@ -31,6 +31,38 @@ describe("buildExportSnapshot", () => {
     ]);
   });
 
+  it("normalizes date-only payment strings", () => {
+    const snapshot = buildExportSnapshot({
+      storagePlaces: [],
+      debts: [],
+      payments: [{ paymentDate: "2026-06-03", amount: 1500, asset: "RUB", status: "expected" }]
+    });
+
+    expect(snapshot["04 График и оплаты"][1]).toEqual([
+      "2026-06-03",
+      1500,
+      "RUB",
+      "expected"
+    ]);
+  });
+
+  it("rejects timestamp strings in payment dates", () => {
+    expect(() =>
+      buildExportSnapshot({
+        storagePlaces: [],
+        debts: [],
+        payments: [
+          {
+            paymentDate: "2026-06-03T00:00:00.000Z",
+            amount: 1500,
+            asset: "RUB",
+            status: "expected"
+          }
+        ]
+      })
+    ).toThrow("Invalid date: 2026-06-03T00:00:00.000Z");
+  });
+
   it("rejects unsafe numeric values instead of silently exporting them", () => {
     expect(() => toFiniteSheetNumber(null, "amount")).toThrow("amount must be numeric");
     expect(() => toFiniteSheetNumber("", "amount")).toThrow("amount must not be blank");

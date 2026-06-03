@@ -3167,6 +3167,8 @@ git commit -m "feat: add mobile finance app UI shell"
 
 ## Task 11: Import Current Data And Export Snapshot
 
+Implementation note: review hardening keeps displayed percent values as `7` and `6.5`, makes current import idempotent through owner-scoped unique constraints, uses Moscow-local import dates, and rejects non-date-only payment strings during snapshot export.
+
 **Files:**
 - Create: `apps/finance-app/src/server/import/current-finance-seed.ts`
 - Create: `apps/finance-app/src/server/export/snapshot.ts`
@@ -3175,7 +3177,7 @@ git commit -m "feat: add mobile finance app UI shell"
 - Create: `apps/finance-app/tests/import/current-finance-seed.test.ts`
 - Create: `apps/finance-app/tests/export/snapshot.test.ts`
 
-- [ ] **Step 1: Write import seed tests**
+- [x] **Step 1: Write import seed tests**
 
 Create `apps/finance-app/tests/import/current-finance-seed.test.ts`:
 
@@ -3193,7 +3195,7 @@ describe("buildCurrentFinanceSeed", () => {
 });
 ```
 
-- [ ] **Step 2: Implement current seed builder**
+- [x] **Step 2: Implement current seed builder**
 
 Create `apps/finance-app/src/server/import/current-finance-seed.ts`:
 
@@ -3221,7 +3223,7 @@ export function buildCurrentFinanceSeed(todayIso: string) {
 }
 ```
 
-- [ ] **Step 3: Write export snapshot test**
+- [x] **Step 3: Write export snapshot test**
 
 Create `apps/finance-app/tests/export/snapshot.test.ts`:
 
@@ -3243,7 +3245,7 @@ describe("buildExportSnapshot", () => {
 });
 ```
 
-- [ ] **Step 4: Implement export snapshot**
+- [x] **Step 4: Implement export snapshot**
 
 Create `apps/finance-app/src/server/export/snapshot.ts`:
 
@@ -3275,7 +3277,7 @@ export function buildExportSnapshot(input: {
 }
 ```
 
-- [ ] **Step 5: Add import/export routes**
+- [x] **Step 5: Add import/export routes**
 
 Create `apps/finance-app/src/app/api/import/current/route.ts`:
 
@@ -3336,7 +3338,7 @@ export async function GET() {
 }
 ```
 
-- [ ] **Step 6: Run checks and commit**
+- [x] **Step 6: Run checks and commit**
 
 Run:
 

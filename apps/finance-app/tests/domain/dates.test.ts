@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { endOfMonthIso, normalizeDateOnly } from "@/domain/dates";
+import { dateToMoscowDateIso, endOfMonthIso, normalizeDateOnly } from "@/domain/dates";
 
 describe("date helpers", () => {
   it("keeps explicit ISO dates", () => {
@@ -14,5 +14,9 @@ describe("date helpers", () => {
 
   it("converts end of month for Moscow-local date context", () => {
     expect(endOfMonthIso("2026-06-03")).toBe("2026-06-30");
+  });
+
+  it("uses Moscow date for timezone-sensitive current dates", () => {
+    expect(dateToMoscowDateIso(new Date("2026-06-02T21:30:00.000Z"))).toBe("2026-06-03");
   });
 });

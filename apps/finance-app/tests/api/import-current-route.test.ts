@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildCurrentFinanceSeed } from "@/server/import/current-finance-seed";
 import { POST } from "@/app/api/import/current/route";
 
@@ -44,47 +44,49 @@ describe("import current route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-03T12:00:00.000Z"));
+    vi.setSystemTime(new Date("2026-06-02T21:30:00.000Z"));
     mocks.getLocalOwner.mockResolvedValue({ id: "owner-1", telegramUserId: "123" });
     mocks.createStoragePlace.mockResolvedValue({ id: "storage-created" });
     mocks.createDebtWithOptionalPlan.mockResolvedValue({ id: "debt-created" });
   });
 
-  it("creates missing seed rows through audited services and skips existing owner rows", async () => {
-    mocks.storagePlaceFindMany.mockResolvedValue([{ name: "Bybit" }]);
-    mocks.debtFindMany.mockResolvedValue([
-      { partyName: "Геворг", basis: "личный долг другу" }
-    ]);
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("creates seed rows through audited services and skips unique conflicts", async () => {
+    const seed = buildCurrentFinanceSeed("2026-06-03");
+    mocks.createStoragePlace.mockImplementation(async (_prisma, input) => {
+      if (input.name === "Bybit") {
+        throw { code: "P2002" };
+      }
+
+      return { id: "storage-created" };
+    });
+    mocks.createDebtWithOptionalPlan.mockImplementation(async (_prisma, input) => {
+      if (input.partyName === "Геворг") {
+        throw { code: "P2002" };
+      }
+
+      return { id: "debt-created" };
+    });
 
     const response = await POST();
 
-    expect(mocks.storagePlaceFindMany).toHaveBeenCalledWith({
-      where: { ownerId: "owner-1" },
-      select: { name: true }
-    });
-    expect(mocks.debtFindMany).toHaveBeenCalledWith({
-      where: { ownerId: "owner-1" },
-      select: { partyName: true, basis: true }
-    });
-    expect(mocks.createStoragePlace).toHaveBeenCalledTimes(7);
-    expect(mocks.createStoragePlace).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ name: "Bybit" })
-    );
+    expect(mocks.storagePlaceFindMany).not.toHaveBeenCalled();
+    expect(mocks.debtFindMany).not.toHaveBeenCalled();
+    expect(mocks.createStoragePlace).toHaveBeenCalledTimes(seed.storagePlaces.length);
     expect(mocks.createStoragePlace).toHaveBeenCalledWith(
       mocks.prisma,
       expect.objectContaining({
         ownerId: "owner-1",
         actor: "import:current-finance-seed",
         source: "import",
-        name: "Тбанк накопительный счет"
+        name: "Тбанк накопительный счет",
+        rate: 7
       })
     );
-    expect(mocks.createDebtWithOptionalPlan).toHaveBeenCalledTimes(3);
-    expect(mocks.createDebtWithOptionalPlan).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ partyName: "Геворг" })
-    );
+    expect(mocks.createDebtWithOptionalPlan).toHaveBeenCalledTimes(seed.debts.length);
     expect(mocks.createDebtWithOptionalPlan).toHaveBeenCalledWith(
       mocks.prisma,
       expect.objectContaining({
@@ -104,21 +106,23 @@ describe("import current route", () => {
 
   it("skips the full seed when it has already been imported", async () => {
     const seed = buildCurrentFinanceSeed("2026-06-03");
-    mocks.storagePlaceFindMany.mockResolvedValue(
-      seed.storagePlaces.map((place) => ({ name: place.name }))
-    );
-    mocks.debtFindMany.mockResolvedValue(
-      seed.debts.map((debt) => ({ partyName: debt.partyName, basis: debt.basis }))
-    );
+    mocks.createStoragePlace.mockRejectedValue({ code: "P2002" });
+    mocks.createDebtWithOptionalPlan.mockRejectedValue({ code: "P2002" });
 
     const response = await POST();
 
-    expect(mocks.createStoragePlace).not.toHaveBeenCalled();
-    expect(mocks.createDebtWithOptionalPlan).not.toHaveBeenCalled();
+    expect(mocks.createStoragePlace).toHaveBeenCalledTimes(seed.storagePlaces.length);
+    expect(mocks.createDebtWithOptionalPlan).toHaveBeenCalledTimes(seed.debts.length);
     await expect(response.json()).resolves.toEqual({
       importedAt: "2026-06-03",
       storagePlaces: { created: 0, skipped: 8 },
       debts: { created: 0, skipped: 4 }
     });
+  });
+
+  it("rethrows non-unique storage creation errors", async () => {
+    mocks.createStoragePlace.mockRejectedValue(new Error("database unavailable"));
+
+    await expect(POST()).rejects.toThrow("database unavailable");
   });
 });

@@ -1,3 +1,5 @@
+import { normalizeDateOnly } from "@/domain/dates";
+
 type DecimalLike = {
   toString(): string;
 };
@@ -72,7 +74,7 @@ const toDateIso = (value: Date | string): string => {
     return value.toISOString().slice(0, 10);
   }
 
-  return value;
+  return normalizeDateOnly(value);
 };
 
 export function buildExportSnapshot(input: ExportSnapshotInput): ExportSnapshot {

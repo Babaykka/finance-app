@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { dateToMoscowDateIso, MOSCOW_TIMEZONE } from "@/domain/dates";
 import type { Source } from "@/domain/enums";
 import type { AiParserContext } from "@/server/ai/parser";
 
-const MOSCOW_TIMEZONE = "Europe/Moscow";
 const DEFAULT_PARSE_MODEL = "gpt-5.4-nano";
 
 export const ParseMessageRequestSchema = z.object({
@@ -34,18 +34,6 @@ const mapParseSourceToDraftSource = (source: ParseMessageSource): Source => {
   }
 
   return source;
-};
-
-const getMoscowTodayIso = () => {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: MOSCOW_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
-
-  const valueByType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${valueByType.year}-${valueByType.month}-${valueByType.day}`;
 };
 
 const toFiniteNumber = (value: unknown, label: string) => {
@@ -89,7 +77,7 @@ export async function POST(request: Request) {
   ]);
 
   const context: AiParserContext = {
-    todayIso: getMoscowTodayIso(),
+    todayIso: dateToMoscowDateIso(),
     timezone: MOSCOW_TIMEZONE,
     knownDebts: debts.map((debt) => ({
       id: debt.id,
