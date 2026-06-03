@@ -9,11 +9,11 @@ import {
   StorageSubtypeSchema,
   StorageTypeSchema
 } from "@/domain/enums";
-import { writeAuditLog } from "./audit-service";
+import { toAuditObject, writeAuditLog } from "./audit-service";
 
 export const CreateStoragePlaceSchema = z.object({
-  ownerId: z.string(),
-  actor: z.string(),
+  ownerId: z.string().min(1),
+  actor: z.string().min(1),
   source: SourceSchema,
   name: z.string().min(1),
   type: StorageTypeSchema,
@@ -33,64 +33,27 @@ export const CreateStoragePlaceSchema = z.object({
   comment: z.string().optional()
 });
 
-type StorageDb = {
-  storagePlace: Pick<PrismaClient["storagePlace"], "create">;
-  auditLog: Pick<PrismaClient["auditLog"], "create">;
-};
-
 type CreateStoragePlaceData = Omit<
   z.infer<typeof CreateStoragePlaceSchema>,
   "actor" | "source"
 >;
 
-const toAuditJsonValue = (value: unknown): Prisma.InputJsonValue | null | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (value === null) {
-    return null;
-  }
-
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-
-  if (typeof value === "string" || typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      throw new Error("Audit values must contain only finite numbers");
-    }
-
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => toAuditJsonValue(item) ?? null);
-  }
-
-  if (typeof value === "object") {
-    return toAuditObject(value as Record<string, unknown>);
-  }
-
-  throw new Error("Audit values must be JSON-compatible");
+type StorageTransactionDb = {
+  storagePlace: Pick<PrismaClient["storagePlace"], "create">;
+  auditLog: Pick<PrismaClient["auditLog"], "create">;
 };
 
-const toAuditObject = (input: Record<string, unknown>): Prisma.InputJsonObject => {
-  const output: Record<string, Prisma.InputJsonValue | null> = {};
+type StorageDb = StorageTransactionDb & Partial<Pick<PrismaClient, "$transaction">>;
 
-  for (const [key, value] of Object.entries(input)) {
-    const jsonValue = toAuditJsonValue(value);
-
-    if (jsonValue !== undefined) {
-      output[key] = jsonValue;
-    }
+const runInStorageTransaction = <T>(
+  db: StorageDb,
+  action: (tx: StorageTransactionDb) => Promise<T>
+) => {
+  if (!db.$transaction) {
+    return action(db);
   }
 
-  return output;
+  return db.$transaction((tx) => action(tx as StorageTransactionDb));
 };
 
 export async function createStoragePlace(db: StorageDb, rawInput: unknown) {
@@ -98,16 +61,19 @@ export async function createStoragePlace(db: StorageDb, rawInput: unknown) {
   const { actor, source, ...data } = input;
   const createData: Prisma.StoragePlaceUncheckedCreateInput =
     data satisfies CreateStoragePlaceData;
-  const created = await db.storagePlace.create({ data: createData });
 
-  await writeAuditLog(db, {
-    ownerId: input.ownerId,
-    actor,
-    source,
-    entityType: "StoragePlace",
-    entityId: created.id,
-    newValues: toAuditObject(data)
+  return runInStorageTransaction(db, async (tx) => {
+    const created = await tx.storagePlace.create({ data: createData });
+
+    await writeAuditLog(tx, {
+      ownerId: input.ownerId,
+      actor,
+      source,
+      entityType: "StoragePlace",
+      entityId: created.id,
+      newValues: toAuditObject(data)
+    });
+
+    return created;
   });
-
-  return created;
 }

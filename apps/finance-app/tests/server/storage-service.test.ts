@@ -3,13 +3,17 @@ import { createStoragePlace } from "@/server/services/storage-service";
 
 describe("createStoragePlace", () => {
   it("creates Альфабанк Вероники as trusted-person RUB storage with audit", async () => {
-    const db = {
+    const tx = {
       storagePlace: {
         create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Альфабанк Вероники" })
       },
       auditLog: {
         create: vi.fn().mockResolvedValue({ id: "audit-1" })
       }
+    };
+    const db = {
+      ...tx,
+      $transaction: vi.fn(async (callback) => callback(tx))
     };
 
     const result = await createStoragePlace(db as never, {
@@ -30,6 +34,7 @@ describe("createStoragePlace", () => {
     });
 
     expect(result.id).toBe("storage-1");
+    expect(db.$transaction).toHaveBeenCalledOnce();
     expect(db.storagePlace.create).toHaveBeenCalledWith({
       data: {
         ownerId: "owner-1",
@@ -57,5 +62,38 @@ describe("createStoragePlace", () => {
         })
       })
     });
+  });
+
+  it("rejects empty actors before creating storage", async () => {
+    const db = {
+      storagePlace: {
+        create: vi.fn()
+      },
+      auditLog: {
+        create: vi.fn()
+      },
+      $transaction: vi.fn()
+    };
+
+    await expect(
+      createStoragePlace(db as never, {
+        ownerId: "owner-1",
+        actor: "",
+        source: "telegram_text",
+        name: "Альфабанк Вероники",
+        type: "trusted_person",
+        subtype: "not_applicable",
+        holderContext: "Вероника",
+        asset: "RUB",
+        amount: 804000,
+        amountKind: "exact",
+        availability: "restricted",
+        status: "check",
+        attentionPriority: "high"
+      })
+    ).rejects.toThrow();
+
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(db.storagePlace.create).not.toHaveBeenCalled();
   });
 });

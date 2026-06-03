@@ -3,7 +3,7 @@ import { createDebtWithOptionalPlan, recordDebtPayment } from "@/server/services
 
 describe("debt service", () => {
   it("creates work receivable with a planned payment", async () => {
-    const db = {
+    const tx = {
       debt: {
         create: vi.fn().mockResolvedValue({ id: "debt-1", partyName: "Степан Гаврилюк" }),
         findFirstOrThrow: vi.fn(),
@@ -15,6 +15,10 @@ describe("debt service", () => {
       auditLog: {
         create: vi.fn().mockResolvedValue({ id: "audit-1" })
       }
+    };
+    const db = {
+      ...tx,
+      $transaction: vi.fn(async (callback) => callback(tx))
     };
 
     await createDebtWithOptionalPlan(db as never, {
@@ -47,8 +51,20 @@ describe("debt service", () => {
         status: "expected"
       })
     });
-    expect(db.auditLog.create).toHaveBeenCalledOnce();
-    expect(db.auditLog.create).toHaveBeenCalledWith({
+    expect(db.$transaction).toHaveBeenCalledOnce();
+    expect(db.auditLog.create).toHaveBeenCalledTimes(2);
+    expect(db.auditLog.create).toHaveBeenNthCalledWith(1, {
+      data: expect.objectContaining({
+        entityType: "DebtPayment",
+        entityId: "payment-1",
+        newValues: expect.objectContaining({
+          recordType: "planned",
+          paymentDate: "2026-06-03T00:00:00.000Z",
+          status: "expected"
+        })
+      })
+    });
+    expect(db.auditLog.create).toHaveBeenNthCalledWith(2, {
       data: expect.objectContaining({
         entityType: "Debt",
         entityId: "debt-1",
@@ -61,14 +77,15 @@ describe("debt service", () => {
   });
 
   it("records actual payment and reduces remaining amount", async () => {
-    const db = {
+    const tx = {
       debt: {
         create: vi.fn(),
         findFirstOrThrow: vi.fn().mockResolvedValue({
           id: "debt-2",
           ownerId: "owner-1",
           remainingAmount: 50000,
-          asset: "RUB"
+          asset: "RUB",
+          status: "scheduled"
         }),
         update: vi.fn().mockResolvedValue({ id: "debt-2", remainingAmount: 40000 })
       },
@@ -78,6 +95,10 @@ describe("debt service", () => {
       auditLog: {
         create: vi.fn().mockResolvedValue({ id: "audit-2" })
       }
+    };
+    const db = {
+      ...tx,
+      $transaction: vi.fn(async (callback) => callback(tx))
     };
 
     const payment = await recordDebtPayment(db as never, {
@@ -92,6 +113,7 @@ describe("debt service", () => {
     });
 
     expect(payment.id).toBe("payment-2");
+    expect(db.$transaction).toHaveBeenCalledOnce();
     expect(db.debtPayment.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         recordType: "actual",
@@ -99,29 +121,86 @@ describe("debt service", () => {
         amount: 10000
       })
     });
-    expect(db.debt.update).toHaveBeenCalledWith({
-      where: { id: "debt-2" },
-      data: { remainingAmount: 40000 }
-    });
+    const updateCall = db.debt.update.mock.calls[0]?.[0];
+    expect(updateCall.where).toEqual({ id: "debt-2" });
+    expect(updateCall.data.remainingAmount.toString()).toBe("40000");
+    expect(updateCall.data).not.toHaveProperty("status");
     expect(db.auditLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         entityType: "DebtPayment",
         entityId: "payment-2",
-        oldValues: { debtRemainingAmount: 50000 },
-        newValues: { debtRemainingAmount: 40000, paymentAmount: 10000 }
+        oldValues: { debtRemainingAmount: "50000", debtStatus: "scheduled" },
+        newValues: expect.objectContaining({
+          debtId: "debt-2",
+          paymentDate: "2026-06-03T00:00:00.000Z",
+          asset: "RUB",
+          status: "received",
+          debtRemainingAmount: "40000",
+          debtStatus: "scheduled"
+        })
+      })
+    });
+  });
+
+  it("closes the debt when an actual payment reaches zero remaining amount", async () => {
+    const tx = {
+      debt: {
+        create: vi.fn(),
+        findFirstOrThrow: vi.fn().mockResolvedValue({
+          id: "debt-4",
+          ownerId: "owner-1",
+          remainingAmount: 10000,
+          asset: "RUB",
+          status: "scheduled"
+        }),
+        update: vi.fn().mockResolvedValue({ id: "debt-4", remainingAmount: 0, status: "closed" })
+      },
+      debtPayment: {
+        create: vi.fn().mockResolvedValue({ id: "payment-4" })
+      },
+      auditLog: {
+        create: vi.fn().mockResolvedValue({ id: "audit-4" })
+      }
+    };
+    const db = {
+      ...tx,
+      $transaction: vi.fn(async (callback) => callback(tx))
+    };
+
+    await recordDebtPayment(db as never, {
+      ownerId: "owner-1",
+      actor: "telegram:123",
+      source: "telegram_text",
+      debtId: "debt-4",
+      paymentDate: new Date("2026-06-03T00:00:00.000Z"),
+      amount: 10000,
+      asset: "RUB"
+    });
+
+    const updateCall = db.debt.update.mock.calls[0]?.[0];
+    expect(updateCall.data.remainingAmount.toString()).toBe("0");
+    expect(updateCall.data.status).toBe("closed");
+    expect(db.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        oldValues: { debtRemainingAmount: "10000", debtStatus: "scheduled" },
+        newValues: expect.objectContaining({
+          debtRemainingAmount: "0",
+          debtStatus: "closed"
+        })
       })
     });
   });
 
   it("rejects actual payments in a different asset", async () => {
-    const db = {
+    const tx = {
       debt: {
         create: vi.fn(),
         findFirstOrThrow: vi.fn().mockResolvedValue({
           id: "debt-3",
           ownerId: "owner-1",
           remainingAmount: 50000,
-          asset: "RUB"
+          asset: "RUB",
+          status: "scheduled"
         }),
         update: vi.fn()
       },
@@ -131,6 +210,10 @@ describe("debt service", () => {
       auditLog: {
         create: vi.fn()
       }
+    };
+    const db = {
+      ...tx,
+      $transaction: vi.fn(async (callback) => callback(tx))
     };
 
     await expect(
@@ -144,6 +227,48 @@ describe("debt service", () => {
         asset: "USDT"
       })
     ).rejects.toThrow("Payment asset USDT does not match debt asset RUB");
+
+    expect(db.debtPayment.create).not.toHaveBeenCalled();
+    expect(db.debt.update).not.toHaveBeenCalled();
+    expect(db.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects overpayments before creating a payment", async () => {
+    const tx = {
+      debt: {
+        create: vi.fn(),
+        findFirstOrThrow: vi.fn().mockResolvedValue({
+          id: "debt-5",
+          ownerId: "owner-1",
+          remainingAmount: 5000,
+          asset: "RUB",
+          status: "scheduled"
+        }),
+        update: vi.fn()
+      },
+      debtPayment: {
+        create: vi.fn()
+      },
+      auditLog: {
+        create: vi.fn()
+      }
+    };
+    const db = {
+      ...tx,
+      $transaction: vi.fn(async (callback) => callback(tx))
+    };
+
+    await expect(
+      recordDebtPayment(db as never, {
+        ownerId: "owner-1",
+        actor: "telegram:123",
+        source: "telegram_text",
+        debtId: "debt-5",
+        paymentDate: new Date("2026-06-03T00:00:00.000Z"),
+        amount: 10000,
+        asset: "RUB"
+      })
+    ).rejects.toThrow("Payment amount exceeds debt remaining amount");
 
     expect(db.debtPayment.create).not.toHaveBeenCalled();
     expect(db.debt.update).not.toHaveBeenCalled();

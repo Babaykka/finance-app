@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client";
+
 type StorageSummaryRow = {
   asset: string;
   amount: unknown;
@@ -26,12 +28,48 @@ export type DashboardSummaryInput = {
   drafts: DraftSummaryRow[];
 };
 
+const toMoneyDecimal = (value: unknown, label: string) => {
+  if (
+    value === null ||
+    value === undefined ||
+    (typeof value === "string" && value.trim().length === 0)
+  ) {
+    throw new Error(`Invalid numeric amount for ${label}`);
+  }
+
+  try {
+    const decimal = new Prisma.Decimal(value as Prisma.Decimal.Value);
+    if (!decimal.isFinite()) {
+      throw new Error("Amount must be finite");
+    }
+    return decimal;
+  } catch (error) {
+    throw new Error(`Invalid numeric amount for ${label}`, { cause: error });
+  }
+};
+
+const toFiniteNumber = (value: Prisma.Decimal, label: string) => {
+  const converted = Number(value.toString());
+  if (!Number.isFinite(converted)) {
+    throw new Error(`Invalid numeric amount for ${label}`);
+  }
+  return converted;
+};
+
 export function buildDashboardSummary(input: DashboardSummaryInput) {
-  const assets: Record<string, number> = {};
+  const assetTotals: Record<string, Prisma.Decimal> = {};
 
   for (const place of input.storagePlaces) {
-    assets[place.asset] = (assets[place.asset] ?? 0) + Number(place.amount);
+    const amount = toMoneyDecimal(place.amount, place.name);
+    assetTotals[place.asset] = (assetTotals[place.asset] ?? new Prisma.Decimal(0)).plus(amount);
   }
+
+  const assets = Object.fromEntries(
+    Object.entries(assetTotals).map(([asset, amount]) => [
+      asset,
+      toFiniteNumber(amount, asset)
+    ])
+  );
 
   return {
     assets,

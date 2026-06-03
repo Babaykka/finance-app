@@ -55,6 +55,58 @@ const WriteAuditLogInputSchema = z.object({
 
 export type WriteAuditLogInput = z.input<typeof WriteAuditLogInputSchema>;
 
+export const toAuditJsonValue = (
+  value: unknown
+): Prisma.InputJsonValue | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new Error("Audit values must contain only finite numbers");
+    }
+
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => toAuditJsonValue(item) ?? null);
+  }
+
+  if (typeof value === "object") {
+    return toAuditObject(value as Record<string, unknown>);
+  }
+
+  throw new Error("Audit values must be JSON-compatible");
+};
+
+export const toAuditObject = (input: Record<string, unknown>): Prisma.InputJsonObject => {
+  const output: Record<string, Prisma.InputJsonValue | null> = {};
+
+  for (const [key, value] of Object.entries(input)) {
+    const jsonValue = toAuditJsonValue(value);
+
+    if (jsonValue !== undefined) {
+      output[key] = jsonValue;
+    }
+  }
+
+  return output;
+};
+
 export const writeAuditLog = async (db: AuditDb, input: unknown) => {
   const data: Prisma.AuditLogUncheckedCreateInput = WriteAuditLogInputSchema.parse(input);
 

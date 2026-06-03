@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Prisma } from "@prisma/client";
 import { buildDashboardSummary } from "@/server/services/dashboard-service";
 
 describe("buildDashboardSummary", () => {
@@ -23,7 +24,7 @@ describe("buildDashboardSummary", () => {
         },
         {
           asset: "USDT",
-          amount: 7331,
+          amount: new Prisma.Decimal(7331),
           type: "crypto_exchange",
           status: "active",
           attentionPriority: "high",
@@ -57,5 +58,24 @@ describe("buildDashboardSummary", () => {
     expect(summary.attentionStorage[0].name).toBe("Альфабанк Вероники");
     expect(summary.upcomingDebts.map((debt) => debt.partyName)).toEqual(["Степан"]);
     expect(summary.pendingDraftCount).toBe(1);
+  });
+
+  it.each(["не число", "", null])("rejects invalid storage amounts: %s", (amount) => {
+    expect(() =>
+      buildDashboardSummary({
+        storagePlaces: [
+          {
+            asset: "RUB",
+            amount,
+            type: "cash",
+            status: "active",
+            attentionPriority: "low",
+            name: "Наличные"
+          }
+        ],
+        debts: [],
+        drafts: []
+      })
+    ).toThrow("Invalid numeric amount for Наличные");
   });
 });
