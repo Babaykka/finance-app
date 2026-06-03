@@ -10,3 +10,4 @@ apps/finance-app/.env.local
 apps/finance-app/prisma/dev.db
 apps/finance-app/prisma/dev.db-journal
 apps/finance-app/coverage/
+apps/finance-app/tsconfig.tsbuildinfo

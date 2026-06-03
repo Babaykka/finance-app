@@ -63,6 +63,8 @@ Modify:
 - Create: `apps/finance-app/tsconfig.json`
 - Create: `apps/finance-app/next.config.ts`
 - Create: `apps/finance-app/vitest.config.ts`
+- Create: `apps/finance-app/next-env.d.ts`
+- Create: `apps/finance-app/src/app/layout.tsx`
 - Create: `apps/finance-app/src/app/page.tsx`
 - Create: `apps/finance-app/tests/smoke.test.ts`
 - Modify: `.gitignore`
@@ -127,13 +129,24 @@ Create `apps/finance-app/tsconfig.json`:
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 }
 ```
@@ -169,7 +182,32 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 3: Add a minimal page and smoke test**
+- [ ] **Step 3: Add Next app root files and smoke test**
+
+Create `apps/finance-app/next-env.d.ts`:
+
+```ts
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+import "./.next/types/routes.d.ts";
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+```
+
+Create `apps/finance-app/src/app/layout.tsx`:
+
+```tsx
+import type { ReactNode } from "react";
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="ru">
+      <body>{children}</body>
+    </html>
+  );
+}
+```
 
 Create `apps/finance-app/src/app/page.tsx`:
 
@@ -208,6 +246,7 @@ apps/finance-app/.env.local
 apps/finance-app/prisma/dev.db
 apps/finance-app/prisma/dev.db-journal
 apps/finance-app/coverage/
+apps/finance-app/tsconfig.tsbuildinfo
 ```
 
 - [ ] **Step 5: Install dependencies and run the first checks**
@@ -219,6 +258,7 @@ cd apps/finance-app
 npm install
 npm test
 npm run typecheck
+npm run build
 ```
 
 Expected:
@@ -226,6 +266,7 @@ Expected:
 ```text
 1 test passed
 typecheck exits 0
+Next build succeeds
 ```
 
 - [ ] **Step 6: Commit**
