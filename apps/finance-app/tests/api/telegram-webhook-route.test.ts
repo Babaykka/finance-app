@@ -121,7 +121,10 @@ describe("telegram webhook route", () => {
     expect(String(parseUrl)).toBe("http://localhost/api/parse-message");
     expect(parseInit).toEqual({
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Finance-Internal-Secret": "secret"
+      },
       body: JSON.stringify({
         text: "Геворг должен 50000",
         source: "telegram_text"
@@ -182,7 +185,10 @@ describe("telegram webhook route", () => {
     expect(String(parseUrl)).toBe("http://localhost/api/parse-message");
     expect(parseInit).toEqual({
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Finance-Internal-Secret": "secret"
+      },
       body: JSON.stringify({
         text: "Геворг вернул 10000 рублей",
         transcript: "Геворг вернул 10000 рублей",
@@ -227,7 +233,8 @@ describe("telegram webhook route", () => {
     );
 
     expect(fetcher).toHaveBeenCalledWith("http://localhost/api/ai-drafts/draft-1/confirm", {
-      method: "POST"
+      method: "POST",
+      headers: { "X-Finance-Internal-Secret": "secret" }
     });
     expect(mocks.answerTelegramCallbackQuery).toHaveBeenCalledWith({
       fetcher,

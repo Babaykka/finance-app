@@ -50,10 +50,16 @@ const validateWebhookSecret = (request: Request) => {
   return null;
 };
 
+const getInternalAccessHeaders = (): Record<string, string> => {
+  const internalSecret = process.env.INTERNAL_API_SECRET ?? process.env.TELEGRAM_WEBHOOK_SECRET;
+
+  return internalSecret ? { "X-Finance-Internal-Secret": internalSecret } : {};
+};
+
 const postToParseMessage = async (request: Request, body: unknown) => {
   const parseResponse = await fetch(new URL("/api/parse-message", request.url), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getInternalAccessHeaders() },
     body: JSON.stringify(body)
   });
 
@@ -66,7 +72,8 @@ const postToParseMessage = async (request: Request, body: unknown) => {
 
 const postToLocalRoute = async (request: Request, path: string) => {
   const response = await fetch(new URL(path, request.url).toString(), {
-    method: "POST"
+    method: "POST",
+    headers: getInternalAccessHeaders()
   });
 
   let body: unknown;

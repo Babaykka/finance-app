@@ -56,6 +56,12 @@ Webhook route: `/api/telegram/webhook`.
 
 Бот принимает текст и voice-сообщения от разрешенного Telegram ID. Автоматический разбор создает только черновики; запись в базу происходит после подтверждения.
 
+## Доступ
+
+В production все страницы и обычные API закрыты Next proxy. Доступ к интерфейсу выдается через Telegram Mini App: `/login` проверяет Telegram WebApp init data, сверяет пользователя с `TELEGRAM_ALLOWED_USER_ID` и ставит httpOnly-сессию.
+
+Публичными остаются только `/api/health`, `/login`, `/api/auth/telegram` и `/api/telegram/webhook`. Webhook дополнительно проверяет `TELEGRAM_WEBHOOK_SECRET`; его внутренние запросы к API проходят по `X-Finance-Internal-Secret`.
+
 ### Локальный режим бота
 
 Telegram не может открыть локальный `http://localhost:3000` как Mini App и не может слать webhook в локальный URL. Для разработки с локальным сайтом запусти два процесса:
