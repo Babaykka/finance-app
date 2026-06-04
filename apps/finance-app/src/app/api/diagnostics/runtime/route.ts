@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import { getOpenAiApiKey, normalizeOpenAiApiKey } from "@/server/ai/api-key";
 import { hasInternalAccess } from "@/server/auth/internal-access";
 
 const DEFAULT_PARSE_MODEL = "gpt-4o-mini";
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
     hasTelegramAllowedUserId: Boolean(process.env.TELEGRAM_ALLOWED_USER_ID),
     hasTelegramBotToken: Boolean(process.env.TELEGRAM_BOT_TOKEN),
     hasTelegramWebhookSecret: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET),
-    hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY),
+    hasOpenAiApiKey: Boolean(normalizeOpenAiApiKey(process.env.OPENAI_API_KEY)),
     parseModel
   };
 
@@ -72,11 +73,12 @@ export async function GET(request: Request) {
     type: null as string | null
   };
 
-  if (!process.env.OPENAI_API_KEY) {
+  const openAiApiKey = normalizeOpenAiApiKey(process.env.OPENAI_API_KEY);
+  if (!openAiApiKey) {
     openai.error = "missing_openai_api_key";
   } else {
     try {
-      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const client = new OpenAI({ apiKey: getOpenAiApiKey() });
       await client.models.retrieve(parseModel);
       openai.ok = true;
       openai.modelAvailable = true;

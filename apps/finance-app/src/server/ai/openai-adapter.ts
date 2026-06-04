@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { getOpenAiApiKey } from "./api-key";
 import { parseAiJson, type AiParser } from "./parser";
 
 const SYSTEM_PROMPT = [
@@ -52,13 +53,7 @@ export type OpenAiParserClient = {
 };
 
 export function getOpenAiClient(): OpenAiParserClient {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for AI parsing");
-  }
-
-  return new OpenAI({ apiKey }) as OpenAiParserClient;
+  return new OpenAI({ apiKey: getOpenAiApiKey() }) as OpenAiParserClient;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
