@@ -14,17 +14,20 @@ const ERROR_REPLY_TEXT = [
 const getRouteDependencies = async () => {
   const [
     { getOpenAiClient },
+    { createDraftFromParsedMessage },
     { transcribeAudioFile },
     { answerTelegramCallbackQuery, sendTelegramMessage },
     { downloadTelegramVoiceFile }
   ] = await Promise.all([
     import("@/server/ai/openai-adapter"),
+    import("@/server/services/parse-message-service"),
     import("@/server/ai/transcription"),
     import("@/server/telegram/client"),
     import("@/server/telegram/voice")
   ]);
 
   return {
+    createDraftFromParsedMessage,
     getOpenAiClient,
     transcribeAudioFile,
     answerTelegramCallbackQuery,
@@ -80,20 +83,6 @@ const getTelegramReplyTarget = (update: z.infer<typeof TelegramUpdateSchema>) =>
   };
 };
 
-const postToParseMessage = async (request: Request, body: unknown) => {
-  const parseResponse = await fetch(new URL("/api/parse-message", request.url), {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getInternalAccessHeaders() },
-    body: JSON.stringify(body)
-  });
-
-  if (!parseResponse.ok) {
-    throw new Error(`parse-message failed with HTTP ${parseResponse.status}`);
-  }
-
-  return parseResponse.json() as Promise<{ id: string; parsedActions: unknown }>;
-};
-
 const postToLocalRoute = async (request: Request, path: string) => {
   const response = await fetch(new URL(path, request.url).toString(), {
     method: "POST",
@@ -131,6 +120,7 @@ export async function POST(request: Request) {
   const botToken = getRequiredBotToken();
   const {
     answerTelegramCallbackQuery,
+    createDraftFromParsedMessage,
     downloadTelegramVoiceFile,
     getOpenAiClient,
     sendTelegramMessage,
@@ -145,7 +135,7 @@ export async function POST(request: Request) {
       botToken,
       allowedUserId: process.env.TELEGRAM_ALLOWED_USER_ID,
       transcribeModel: process.env.OPENAI_TRANSCRIBE_MODEL ?? DEFAULT_TRANSCRIBE_MODEL,
-      parseMessage: (body) => postToParseMessage(request, body),
+      parseMessage: createDraftFromParsedMessage,
       confirmDraft: (draftId) =>
         postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/confirm`),
       rejectDraft: (draftId) =>

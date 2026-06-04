@@ -4,6 +4,7 @@ import { POST } from "@/app/api/telegram/webhook/route";
 const mocks = vi.hoisted(() => {
   const sendTelegramMessage = vi.fn();
   const answerTelegramCallbackQuery = vi.fn();
+  const createDraftFromParsedMessage = vi.fn();
   const downloadTelegramVoiceFile = vi.fn();
   const transcribeAudioFile = vi.fn();
   const getOpenAiClient = vi.fn();
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => {
   return {
     sendTelegramMessage,
     answerTelegramCallbackQuery,
+    createDraftFromParsedMessage,
     downloadTelegramVoiceFile,
     transcribeAudioFile,
     getOpenAiClient,
@@ -22,6 +24,10 @@ const mocks = vi.hoisted(() => {
 vi.mock("@/server/telegram/client", () => ({
   answerTelegramCallbackQuery: mocks.answerTelegramCallbackQuery,
   sendTelegramMessage: mocks.sendTelegramMessage
+}));
+
+vi.mock("@/server/services/parse-message-service", () => ({
+  createDraftFromParsedMessage: mocks.createDraftFromParsedMessage
 }));
 
 vi.mock("@/server/telegram/voice", () => ({
@@ -47,6 +53,7 @@ const expectNoDownstreamCalls = (fetcher: ReturnType<typeof vi.fn>) => {
   expect(fetcher).not.toHaveBeenCalled();
   expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
   expect(mocks.answerTelegramCallbackQuery).not.toHaveBeenCalled();
+  expect(mocks.createDraftFromParsedMessage).not.toHaveBeenCalled();
   expect(mocks.downloadTelegramVoiceFile).not.toHaveBeenCalled();
   expect(mocks.getOpenAiClient).not.toHaveBeenCalled();
   expect(mocks.transcribeAudioFile).not.toHaveBeenCalled();
@@ -100,12 +107,9 @@ describe("telegram webhook route", () => {
       id: "draft-1",
       parsedActions: { summary: "Создать долг Геворга на 50 000 RUB." }
     };
-    const fetcher = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 201,
-      json: vi.fn().mockResolvedValue(draft)
-    });
+    const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
+    mocks.createDraftFromParsedMessage.mockResolvedValue(draft);
 
     const response = await POST(
       telegramWebhookRequest({
@@ -117,19 +121,11 @@ describe("telegram webhook route", () => {
       })
     );
 
-    const [parseUrl, parseInit] = fetcher.mock.calls[0];
-    expect(String(parseUrl)).toBe("http://localhost/api/parse-message");
-    expect(parseInit).toEqual({
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Finance-Internal-Secret": "secret"
-      },
-      body: JSON.stringify({
-        text: "Геворг должен 50000",
-        source: "telegram_text"
-      })
+    expect(mocks.createDraftFromParsedMessage).toHaveBeenCalledWith({
+      text: "Геворг должен 50000",
+      source: "telegram_text"
     });
+    expect(fetcher).not.toHaveBeenCalled();
     expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
       fetcher,
       botToken: "token",
@@ -145,12 +141,9 @@ describe("telegram webhook route", () => {
   });
 
   it("notifies the user when text message processing fails", async () => {
-    const fetcher = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-      json: vi.fn().mockResolvedValue({})
-    });
+    const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
+    mocks.createDraftFromParsedMessage.mockRejectedValue(new Error("parse failed"));
 
     const response = await POST(
       telegramWebhookRequest({
@@ -182,13 +175,10 @@ describe("telegram webhook route", () => {
       id: "draft-voice",
       parsedActions: { summary: "Зафиксировать оплату долга." }
     };
-    const fetcher = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 201,
-      json: vi.fn().mockResolvedValue(draft)
-    });
+    const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
     process.env.OPENAI_TRANSCRIBE_MODEL = "voice-model";
+    mocks.createDraftFromParsedMessage.mockResolvedValue(draft);
     mocks.downloadTelegramVoiceFile.mockResolvedValue(voiceFile);
     mocks.transcribeAudioFile.mockResolvedValue("Геворг вернул 10000 рублей");
 
@@ -213,19 +203,10 @@ describe("telegram webhook route", () => {
       model: "voice-model",
       language: "ru"
     });
-    const [parseUrl, parseInit] = fetcher.mock.calls[0];
-    expect(String(parseUrl)).toBe("http://localhost/api/parse-message");
-    expect(parseInit).toEqual({
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Finance-Internal-Secret": "secret"
-      },
-      body: JSON.stringify({
-        text: "Геворг вернул 10000 рублей",
-        transcript: "Геворг вернул 10000 рублей",
-        source: "telegram_voice"
-      })
+    expect(mocks.createDraftFromParsedMessage).toHaveBeenCalledWith({
+      text: "Геворг вернул 10000 рублей",
+      transcript: "Геворг вернул 10000 рублей",
+      source: "telegram_voice"
     });
     expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
       fetcher,
