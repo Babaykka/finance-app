@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { hasInternalAccess } from "@/server/auth/internal-access";
 
-const DEFAULT_PARSE_MODEL = "gpt-5.4-nano";
+const DEFAULT_PARSE_MODEL = "gpt-4o-mini";
 
 const getRouteDependencies = async () => {
   const [{ prisma }, { getLocalOwner }] = await Promise.all([

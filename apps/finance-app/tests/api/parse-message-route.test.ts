@@ -219,4 +219,34 @@ describe("parse-message route request schema", () => {
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(draft);
   });
+
+  it("uses the production-safe default parser model when env is not set", async () => {
+    const parseResult = {
+      confidence: 0.8,
+      summary: "Создать черновик долга.",
+      actions: [],
+      needsClarification: ["Уточнить имя должника."]
+    };
+    const draft = { id: "draft-default-model", status: "pending", parsedActions: parseResult };
+    delete process.env.OPENAI_PARSE_MODEL;
+    mocks.getLocalOwner.mockResolvedValue({ id: "owner-1", telegramUserId: "123" });
+    mocks.debtFindMany.mockResolvedValue([]);
+    mocks.storagePlaceFindMany.mockResolvedValue([]);
+    mocks.parseMessage.mockResolvedValue(parseResult);
+    mocks.createAiDraft.mockResolvedValue(draft);
+
+    const response = await POST(
+      new Request("http://localhost/api/parse-message", {
+        method: "POST",
+        body: JSON.stringify({
+          text: "Геворг должен 50000 рублей",
+          source: "telegram_text"
+        })
+      })
+    );
+
+    expect(mocks.createOpenAiParser).toHaveBeenCalledWith(mocks.openAiClient, "gpt-4o-mini");
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual(draft);
+  });
 });

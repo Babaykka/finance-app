@@ -4,7 +4,7 @@ import { dateToMoscowDateIso, MOSCOW_TIMEZONE } from "@/domain/dates";
 import type { Source } from "@/domain/enums";
 import type { AiParserContext } from "@/server/ai/parser";
 
-const DEFAULT_PARSE_MODEL = "gpt-5.4-nano";
+const DEFAULT_PARSE_MODEL = "gpt-4o-mini";
 
 export const ParseMessageRequestSchema = z.object({
   text: z.string().trim().min(1),

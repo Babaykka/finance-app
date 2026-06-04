@@ -36,3 +36,5 @@ services:
         value: Финансы
       - key: OPENAI_API_KEY
         sync: false
+      - key: OPENAI_PARSE_MODEL
+        value: gpt-4o-mini
