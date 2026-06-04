@@ -1,26 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ACCESS_SESSION_COOKIE, verifyAccessSession } from "@/server/auth/access-session";
-
-const INTERNAL_SECRET_HEADER = "x-finance-internal-secret";
+import { hasInternalAccess } from "@/server/auth/internal-access";
 
 const isAccessControlEnabled = () =>
   process.env.ACCESS_CONTROL === "true" || process.env.NODE_ENV === "production";
-
-const getExpectedInternalSecret = () =>
-  process.env.INTERNAL_API_SECRET ?? process.env.TELEGRAM_WEBHOOK_SECRET ?? "";
-
-const timingSafeEqual = (left: string, right: string) => {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  let diff = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-
-  return diff === 0;
-};
 
 const isPublicPath = (pathname: string) =>
   pathname === "/login" ||
@@ -30,19 +13,12 @@ const isPublicPath = (pathname: string) =>
   pathname === "/api/telegram/webhook" ||
   pathname.startsWith("/_next/");
 
-const hasInternalAccess = (request: NextRequest) => {
-  const expected = getExpectedInternalSecret();
-  const actual = request.headers.get(INTERNAL_SECRET_HEADER);
-
-  return Boolean(expected && actual && timingSafeEqual(actual, expected));
-};
-
 export async function proxy(request: NextRequest) {
   if (!isAccessControlEnabled() || isPublicPath(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
 
-  if (request.nextUrl.pathname.startsWith("/api/") && hasInternalAccess(request)) {
+  if (request.nextUrl.pathname.startsWith("/api/") && hasInternalAccess(request.headers)) {
     return NextResponse.next();
   }
 

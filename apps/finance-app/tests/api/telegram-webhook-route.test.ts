@@ -144,6 +144,38 @@ describe("telegram webhook route", () => {
     await expect(response.json()).resolves.toEqual({ ok: true, handled: "text" });
   });
 
+  it("notifies the user when text message processing fails", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: vi.fn().mockResolvedValue({})
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    const response = await POST(
+      telegramWebhookRequest({
+        message: {
+          chat: { id: 456, type: "private" },
+          from: { id: 123 },
+          text: "Геворг должен 50000"
+        }
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: expect.stringContaining("не смог разобрать"),
+      buttons: []
+    });
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Telegram update processing failed"
+    });
+  });
+
   it("handles voice messages through Telegram download, transcription, parse-message, and reply", async () => {
     const voiceFile = new File(["voice"], "telegram-voice.ogg", { type: "audio/ogg" });
     const draft = {

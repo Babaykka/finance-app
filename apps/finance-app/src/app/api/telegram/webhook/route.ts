@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { OpenAiTranscriptionClient } from "@/server/ai/transcription";
+import { INTERNAL_SECRET_HEADER } from "@/server/auth/internal-access";
 import { processTelegramUpdate, TelegramUpdateSchema } from "@/server/telegram/update";
 
 const DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
+const ERROR_REPLY_TEXT = [
+  "Я получил сообщение, но не смог разобрать его в черновик.",
+  "Скорее всего, временно недоступен AI-парсер или не настроен OPENAI_API_KEY в Render.",
+  "Попробуй еще раз чуть позже; я уже оставил это место диагностируемым."
+].join("\n");
 
 const getRouteDependencies = async () => {
   const [
@@ -53,7 +59,25 @@ const validateWebhookSecret = (request: Request) => {
 const getInternalAccessHeaders = (): Record<string, string> => {
   const internalSecret = process.env.INTERNAL_API_SECRET ?? process.env.TELEGRAM_WEBHOOK_SECRET;
 
-  return internalSecret ? { "X-Finance-Internal-Secret": internalSecret } : {};
+  return internalSecret ? { [INTERNAL_SECRET_HEADER]: internalSecret } : {};
+};
+
+const getTelegramReplyTarget = (update: z.infer<typeof TelegramUpdateSchema>) => {
+  const message = update.message ?? update.callback_query?.message;
+  if (!message) {
+    return null;
+  }
+
+  const threadId = message.message_thread_id;
+
+  return {
+    chatId: message.chat.id,
+    ...(threadId !== undefined
+      ? message.chat.type === "private"
+        ? { directMessagesTopicId: threadId }
+        : { messageThreadId: threadId }
+      : {})
+  };
 };
 
 const postToParseMessage = async (request: Request, body: unknown) => {
@@ -112,23 +136,44 @@ export async function POST(request: Request) {
     sendTelegramMessage,
     transcribeAudioFile
   } = await getRouteDependencies();
-  const result = await processTelegramUpdate({
-    update,
-    fetcher: fetch,
-    botToken,
-    allowedUserId: process.env.TELEGRAM_ALLOWED_USER_ID,
-    transcribeModel: process.env.OPENAI_TRANSCRIBE_MODEL ?? DEFAULT_TRANSCRIBE_MODEL,
-    parseMessage: (body) => postToParseMessage(request, body),
-    confirmDraft: (draftId) =>
-      postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/confirm`),
-    rejectDraft: (draftId) =>
-      postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/reject`),
-    sendTelegramMessage,
-    answerTelegramCallbackQuery,
-    downloadTelegramVoiceFile,
-    transcribeAudioFile: (client, input) => transcribeAudioFile(client, input),
-    getOpenAiClient: () => getOpenAiClient() as unknown as OpenAiTranscriptionClient
-  });
+  let result: unknown;
+
+  try {
+    result = await processTelegramUpdate({
+      update,
+      fetcher: fetch,
+      botToken,
+      allowedUserId: process.env.TELEGRAM_ALLOWED_USER_ID,
+      transcribeModel: process.env.OPENAI_TRANSCRIBE_MODEL ?? DEFAULT_TRANSCRIBE_MODEL,
+      parseMessage: (body) => postToParseMessage(request, body),
+      confirmDraft: (draftId) =>
+        postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/confirm`),
+      rejectDraft: (draftId) =>
+        postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/reject`),
+      sendTelegramMessage,
+      answerTelegramCallbackQuery,
+      downloadTelegramVoiceFile,
+      transcribeAudioFile: (client, input) => transcribeAudioFile(client, input),
+      getOpenAiClient: () => getOpenAiClient() as unknown as OpenAiTranscriptionClient
+    });
+  } catch {
+    const target = getTelegramReplyTarget(update);
+    if (target) {
+      try {
+        await sendTelegramMessage({
+          fetcher: fetch,
+          botToken,
+          ...target,
+          text: ERROR_REPLY_TEXT,
+          buttons: []
+        });
+      } catch {
+        // Avoid repeated Telegram retries when only the failure notification fails.
+      }
+    }
+
+    return NextResponse.json({ ok: false, error: "Telegram update processing failed" });
+  }
 
   return NextResponse.json(result);
 }
