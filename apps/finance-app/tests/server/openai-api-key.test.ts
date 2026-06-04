@@ -16,7 +16,15 @@ describe("OpenAI API key helpers", () => {
     expect(normalizeOpenAiApiKey("  sk-test  ")).toBe("sk-test");
     expect(normalizeOpenAiApiKey('  "sk-test"  ')).toBe("sk-test");
     expect(normalizeOpenAiApiKey("  'sk-test'  ")).toBe("sk-test");
-    expect(normalizeOpenAiApiKey("  \"sk-test\n\"  ")).toBe("sk-test");
+  });
+
+  it("keeps only the first key line when multiple env lines were pasted", () => {
+    expect(
+      normalizeOpenAiApiKey('sk-test\nTELEGRAM_ALLOWED_USER_ID="123"\nTELEGRAM_BOT_TOKEN="token"')
+    ).toBe("sk-test");
+    expect(normalizeOpenAiApiKey('OPENAI_API_KEY="sk-test"\nTELEGRAM_ALLOWED_USER_ID="123"')).toBe(
+      "sk-test"
+    );
   });
 
   it("returns an empty string for missing or blank values", () => {

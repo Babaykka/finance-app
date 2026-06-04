@@ -1,5 +1,10 @@
 export function normalizeOpenAiApiKey(rawValue: string | undefined) {
-  const trimmed = rawValue?.trim() ?? "";
+  const firstLine =
+    rawValue
+      ?.split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) ?? "";
+  const trimmed = firstLine.replace(/^OPENAI_API_KEY\s*=\s*/i, "").trim();
   const quote = trimmed[0];
 
   if (
