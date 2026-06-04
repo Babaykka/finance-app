@@ -26,16 +26,16 @@
     "lucide-react": "^1.17.0",
     "next": "latest",
     "openai": "latest",
+    "prisma": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "tsx": "latest",
     "zod": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "prisma": "latest",
-    "tsx": "latest",
     "typescript": "latest",
     "vitest": "latest"
   }

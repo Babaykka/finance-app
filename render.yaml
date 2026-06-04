@@ -6,7 +6,7 @@ services:
     region: frankfurt
     branch: finance-app-mvp
     rootDir: apps/finance-app
-    buildCommand: npm run build:render
+    buildCommand: npm ci --include=dev && npm run build:render
     startCommand: npm run start:render
     initialDeployHook: npm run telegram:setup
     autoDeployTrigger: commit
