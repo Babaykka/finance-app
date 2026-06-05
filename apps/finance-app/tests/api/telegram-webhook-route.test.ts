@@ -177,6 +177,44 @@ describe("telegram webhook route", () => {
     });
   });
 
+  it("does not send the generic fallback after attempting a user-visible reply", async () => {
+    const draft = {
+      id: "draft-1",
+      parsedActions: { summary: "Добавлена информация о 280k руб в ВТБ под 0%." }
+    };
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    mocks.createDraftFromParsedMessage.mockResolvedValue(draft);
+    mocks.sendTelegramMessage.mockRejectedValueOnce(new Error("sendMessage failed"));
+
+    const response = await POST(
+      telegramWebhookRequest({
+        message: {
+          chat: { id: 456, type: "private" },
+          from: { id: 123 },
+          text: "можешь добавить что у меня 280к руб в втб под 0%"
+        }
+      })
+    );
+
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledTimes(1);
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Черновик: Добавлена информация о 280k руб в ВТБ под 0%.",
+      buttons: [
+        { text: "Сохранить", callbackData: "draft:draft-1:confirm" },
+        { text: "Исправить", callbackData: "draft:draft-1:edit" },
+        { text: "Отмена", callbackData: "draft:draft-1:reject" }
+      ]
+    });
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Telegram update processing failed"
+    });
+  });
+
   it("handles assistant replies without creating drafts", async () => {
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);

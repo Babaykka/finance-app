@@ -123,10 +123,10 @@ export async function POST(request: Request) {
     transcribeAudioFile
   } = await getRouteDependencies();
   let result: unknown;
-  let userVisibleReplySent = false;
+  let userVisibleReplyAttempted = false;
   const sendUserVisibleTelegramMessage: typeof sendTelegramMessage = async (input) => {
+    userVisibleReplyAttempted = true;
     await sendTelegramMessage(input);
-    userVisibleReplySent = true;
   };
 
   try {
@@ -151,7 +151,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.warn("Telegram update processing failed:", error);
     const target = getTelegramReplyTarget(update);
-    if (target && !userVisibleReplySent) {
+    if (target && !userVisibleReplyAttempted) {
       try {
         await sendTelegramMessage({
           fetcher: fetch,
