@@ -63,6 +63,27 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const VALID_DEBT_TYPES = ["personal_debt", "work_receivable"] as const;
 const VALID_ASSETS = ["RUB", "AMD", "USDT", "BTC", "ETH", "OTHER_CRYPTO"] as const;
+const VALID_STORAGE_TYPES = [
+  "bank_account",
+  "income_bank_product",
+  "cash",
+  "crypto_exchange",
+  "crypto_wallet",
+  "trusted_person",
+  "investment",
+  "other"
+] as const;
+const VALID_STORAGE_SUBTYPES = [
+  "savings_account",
+  "deposit",
+  "brokerage",
+  "card_account",
+  "wallet",
+  "not_applicable",
+  "other"
+] as const;
+const VALID_AMOUNT_KINDS = ["exact", "equivalent", "estimated"] as const;
+const VALID_AVAILABILITY = ["immediate", "delayed", "restricted", "locked_until_date"] as const;
 const VALID_DEBT_STATUSES = [
   "no_agreement",
   "negotiating",
@@ -224,6 +245,132 @@ const normalizeCreateDebtAction = (action: Record<string, unknown>) => {
   };
 };
 
+const firstNonEmptyString = (...values: unknown[]) =>
+  values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
+
+const inferAsset = (action: Record<string, unknown>, rawText: string) => {
+  if (isOneOf(action.asset, VALID_ASSETS)) {
+    return action.asset;
+  }
+
+  const text = normalizeIntentText(rawText);
+  if (text.includes("usdt")) {
+    return "USDT";
+  }
+  if (text.includes("btc") || text.includes("битко")) {
+    return "BTC";
+  }
+  if (text.includes("eth") || text.includes("эфир")) {
+    return "ETH";
+  }
+  if (text.includes("драм") || text.includes("amd")) {
+    return "AMD";
+  }
+
+  return "RUB";
+};
+
+const normalizeStorageType = (action: Record<string, unknown>, rawText: string) => {
+  if (isOneOf(action.storageType, VALID_STORAGE_TYPES)) {
+    return action.storageType;
+  }
+
+  const values = getStringValues(action);
+  if (hasTrustedPersonStorageIntent(rawText) || typeof action.partyName === "string") {
+    return "trusted_person";
+  }
+  if (hasAny(values, ["bybit", "binance", "бирж"])) {
+    return "crypto_exchange";
+  }
+  if (hasAny(values, ["metamask", "wallet", "кошелек", "кошел"])) {
+    return "crypto_wallet";
+  }
+  if (hasAny(values, ["налич"])) {
+    return "cash";
+  }
+  if (hasAny(values, ["инвест", "брокер"])) {
+    return "investment";
+  }
+  if (hasAny(values, ["накоп", "вклад"])) {
+    return "income_bank_product";
+  }
+  if (hasAny(values, ["банк", "карта", "счет", "счёт"])) {
+    return "bank_account";
+  }
+
+  return "other";
+};
+
+const normalizeStorageSubtype = (
+  action: Record<string, unknown>,
+  storageType: ReturnType<typeof normalizeStorageType>
+) => {
+  if (isOneOf(action.subtype, VALID_STORAGE_SUBTYPES)) {
+    return action.subtype;
+  }
+
+  const values = getStringValues(action);
+  if (storageType === "investment" || hasAny(values, ["инвест", "брокер"])) {
+    return "brokerage";
+  }
+  if (storageType === "crypto_wallet" || hasAny(values, ["wallet", "кошелек", "кошел"])) {
+    return "wallet";
+  }
+  if (hasAny(values, ["накоп"])) {
+    return "savings_account";
+  }
+  if (hasAny(values, ["вклад", "депозит"])) {
+    return "deposit";
+  }
+  if (hasAny(values, ["карта", "карточ"])) {
+    return "card_account";
+  }
+
+  return "not_applicable";
+};
+
+const normalizeAvailability = (
+  action: Record<string, unknown>,
+  storageType: ReturnType<typeof normalizeStorageType>
+) => {
+  if (isOneOf(action.availability, VALID_AVAILABILITY)) {
+    return action.availability;
+  }
+
+  if (storageType === "trusted_person" || storageType === "income_bank_product") {
+    return "restricted";
+  }
+
+  return "immediate";
+};
+
+const normalizeCreateStorageAction = (action: Record<string, unknown>, rawText: string) => {
+  const storageType = normalizeStorageType(action, rawText);
+  const holderContext =
+    firstNonEmptyString(action.holderContext, action.partyName, action.name) ?? "Не указано";
+  const name = firstNonEmptyString(action.name, action.partyName, action.holderContext) ?? holderContext;
+  const amount = Number(action.amount);
+
+  return {
+    ...action,
+    name,
+    storageType,
+    subtype: normalizeStorageSubtype(action, storageType),
+    holderContext,
+    asset: inferAsset(action, rawText),
+    amount,
+    amountKind: isOneOf(action.amountKind, VALID_AMOUNT_KINDS) ? action.amountKind : "exact",
+    availability: normalizeAvailability(action, storageType),
+    attentionPriority: normalizeAttentionPriority(action),
+    comment:
+      typeof action.comment === "string" && action.comment.trim().length > 0
+        ? action.comment.trim()
+        : storageType === "trusted_person"
+          ? `Мои деньги находятся у этого человека; хранитель: ${holderContext}.`
+          : undefined
+  };
+};
+
 const toTrustedPersonStorageAction = (action: Record<string, unknown>) => {
   const partyName = typeof action.partyName === "string" ? action.partyName.trim() : "";
   const amount = Number(action.amount);
@@ -281,6 +428,10 @@ function normalizeLooseParserJson(json: unknown, todayIso: string, rawText: stri
             firstTrustedPersonStorageAction ??= storageAction;
           }
           return storageAction;
+        }
+
+        if (action.type === "create_storage_place") {
+          return normalizeCreateStorageAction(action, rawText);
         }
 
         if (action.type === "create_debt") {

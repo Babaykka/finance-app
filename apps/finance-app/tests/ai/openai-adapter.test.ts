@@ -272,6 +272,52 @@ describe("OpenAI parser adapter", () => {
     ]);
   });
 
+  it("normalizes loose trusted-person storage responses into the required draft schema", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.9,
+        summary: "Создано место хранения денег у Абела.",
+        actions: [
+          {
+            type: "create_storage_place",
+            storageType: "trusted_person",
+            partyName: "Абел",
+            amount: 100000,
+            asset: "RUB"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "У Абела у меня есть 100к рублей",
+      context: {
+        todayIso: "2026-06-05",
+        timezone: "Europe/Moscow",
+        knownDebts: [],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions).toEqual([
+      {
+        type: "create_storage_place",
+        name: "Абел",
+        storageType: "trusted_person",
+        subtype: "not_applicable",
+        holderContext: "Абел",
+        asset: "RUB",
+        amount: 100000,
+        amountKind: "exact",
+        availability: "restricted",
+        attentionPriority: "medium",
+        comment: "Мои деньги находятся у этого человека; хранитель: Абел."
+      }
+    ]);
+  });
+
   it("rejects missing response output text", async () => {
     const create = vi.fn().mockResolvedValue({ output_text: "" });
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
