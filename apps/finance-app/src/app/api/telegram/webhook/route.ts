@@ -5,10 +5,6 @@ import { INTERNAL_SECRET_HEADER } from "@/server/auth/internal-access";
 import { processTelegramUpdate, TelegramUpdateSchema } from "@/server/telegram/update";
 
 const DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
-const ERROR_REPLY_TEXT = [
-  "Я получил сообщение, но не смог обработать его.",
-  "Попробуй отправить еще раз или чуть проще сформулировать."
-].join("\n");
 
 const getRouteDependencies = async () => {
   const [
@@ -67,17 +63,6 @@ const getInternalAccessHeaders = (): Record<string, string> => {
   return internalSecret ? { [INTERNAL_SECRET_HEADER]: internalSecret } : {};
 };
 
-const getTelegramReplyTarget = (update: z.infer<typeof TelegramUpdateSchema>) => {
-  const message = update.message ?? update.callback_query?.message;
-  if (!message) {
-    return null;
-  }
-
-  return {
-    chatId: message.chat.id
-  };
-};
-
 const postToLocalRoute = async (request: Request, path: string) => {
   const response = await fetch(new URL(path, request.url).toString(), {
     method: "POST",
@@ -123,9 +108,7 @@ export async function POST(request: Request) {
     transcribeAudioFile
   } = await getRouteDependencies();
   let result: unknown;
-  let userVisibleReplyAttempted = false;
   const sendUserVisibleTelegramMessage: typeof sendTelegramMessage = async (input) => {
-    userVisibleReplyAttempted = true;
     await sendTelegramMessage(input);
   };
 
@@ -150,20 +133,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.warn("Telegram update processing failed:", error);
-    const target = getTelegramReplyTarget(update);
-    if (target && !userVisibleReplyAttempted) {
-      try {
-        await sendTelegramMessage({
-          fetcher: fetch,
-          botToken,
-          ...target,
-          text: ERROR_REPLY_TEXT,
-          buttons: []
-        });
-      } catch {
-        // Avoid repeated Telegram retries when only the failure notification fails.
-      }
-    }
 
     return NextResponse.json({ ok: false, error: "Telegram update processing failed" });
   }

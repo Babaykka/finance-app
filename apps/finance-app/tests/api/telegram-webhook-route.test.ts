@@ -147,7 +147,7 @@ describe("telegram webhook route", () => {
     await expect(response.json()).resolves.toEqual({ ok: true, handled: "text" });
   });
 
-  it("notifies the user when text message processing fails", async () => {
+  it("does not send a generic Telegram fallback when text processing fails", async () => {
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
     mocks.createDraftFromParsedMessage.mockRejectedValue(new Error("parse failed"));
@@ -164,13 +164,7 @@ describe("telegram webhook route", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
-      fetcher,
-      botToken: "token",
-      chatId: 456,
-      text: expect.stringContaining("не смог обработать"),
-      buttons: []
-    });
+    expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: "Telegram update processing failed"
