@@ -154,24 +154,18 @@ const getCommand = (text: string) => {
   return null;
 };
 
-const topicTarget = (chat: { id: number; type?: string }, messageThreadId?: number) => ({
-  chatId: chat.id,
-  ...(messageThreadId !== undefined
-    ? chat.type === "private"
-      ? { directMessagesTopicId: messageThreadId }
-      : { messageThreadId }
-    : {})
+const messageTarget = (message: TelegramMessage) => ({
+  chatId: message.chat.id
 });
-
-const messageTarget = (message: TelegramMessage) =>
-  topicTarget(message.chat, message.message_thread_id);
 
 const callbackMessageTarget = (callback: TelegramCallbackQuery) => {
   if (!callback.message) {
     return null;
   }
 
-  return topicTarget(callback.message.chat, callback.message.message_thread_id);
+  return {
+    chatId: callback.message.chat.id
+  };
 };
 
 export function parseDraftCallbackData(value: string | undefined) {

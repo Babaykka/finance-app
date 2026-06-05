@@ -26,12 +26,10 @@ type TelegramUpdateLike = {
   update_id?: unknown;
   message?: {
     chat?: { id?: unknown; type?: unknown };
-    message_thread_id?: unknown;
   };
   callback_query?: {
     message?: {
       chat?: { id?: unknown; type?: unknown };
-      message_thread_id?: unknown;
     };
   };
 };
@@ -97,19 +95,6 @@ const getUpdateChatId = (update: unknown) => {
   return typeof chatId === "number" ? chatId : undefined;
 };
 
-const getUpdateChatType = (update: unknown) => {
-  const candidate = update as TelegramUpdateLike;
-  const chatType = candidate.message?.chat?.type ?? candidate.callback_query?.message?.chat?.type;
-  return typeof chatType === "string" ? chatType : undefined;
-};
-
-const getUpdateMessageThreadId = (update: unknown) => {
-  const candidate = update as TelegramUpdateLike;
-  const messageThreadId =
-    candidate.message?.message_thread_id ?? candidate.callback_query?.message?.message_thread_id;
-  return typeof messageThreadId === "number" ? messageThreadId : undefined;
-};
-
 async function sendProcessingError(botToken: string, update: unknown) {
   const chatId = getUpdateChatId(update);
   if (chatId === undefined) {
@@ -120,11 +105,6 @@ async function sendProcessingError(botToken: string, update: unknown) {
     fetcher: fetch,
     botToken,
     chatId,
-    ...(getUpdateMessageThreadId(update) !== undefined
-      ? getUpdateChatType(update) === "private"
-        ? { directMessagesTopicId: getUpdateMessageThreadId(update) }
-        : { messageThreadId: getUpdateMessageThreadId(update) }
-      : {}),
     text: "Не смог обработать сообщение. Проверь, что сайт запущен, и отправь еще раз.",
     buttons: []
   });

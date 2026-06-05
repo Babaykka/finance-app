@@ -6,9 +6,8 @@ import { processTelegramUpdate, TelegramUpdateSchema } from "@/server/telegram/u
 
 const DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
 const ERROR_REPLY_TEXT = [
-  "Я получил сообщение, но не смог разобрать его в черновик.",
-  "Скорее всего, временно недоступен AI-парсер или не настроен OPENAI_API_KEY в Render.",
-  "Попробуй еще раз чуть позже; я уже оставил это место диагностируемым."
+  "Я получил сообщение, но не смог обработать его.",
+  "Попробуй отправить еще раз или чуть проще сформулировать."
 ].join("\n");
 
 const getRouteDependencies = async () => {
@@ -71,15 +70,8 @@ const getTelegramReplyTarget = (update: z.infer<typeof TelegramUpdateSchema>) =>
     return null;
   }
 
-  const threadId = message.message_thread_id;
-
   return {
-    chatId: message.chat.id,
-    ...(threadId !== undefined
-      ? message.chat.type === "private"
-        ? { directMessagesTopicId: threadId }
-        : { messageThreadId: threadId }
-      : {})
+    chatId: message.chat.id
   };
 };
 
@@ -127,6 +119,11 @@ export async function POST(request: Request) {
     transcribeAudioFile
   } = await getRouteDependencies();
   let result: unknown;
+  let userVisibleReplySent = false;
+  const sendUserVisibleTelegramMessage: typeof sendTelegramMessage = async (input) => {
+    await sendTelegramMessage(input);
+    userVisibleReplySent = true;
+  };
 
   try {
     result = await processTelegramUpdate({
@@ -140,7 +137,7 @@ export async function POST(request: Request) {
         postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/confirm`),
       rejectDraft: (draftId) =>
         postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/reject`),
-      sendTelegramMessage,
+      sendTelegramMessage: sendUserVisibleTelegramMessage,
       answerTelegramCallbackQuery,
       downloadTelegramVoiceFile,
       transcribeAudioFile: (client, input) => transcribeAudioFile(client, input),
@@ -148,7 +145,7 @@ export async function POST(request: Request) {
     });
   } catch {
     const target = getTelegramReplyTarget(update);
-    if (target) {
+    if (target && !userVisibleReplySent) {
       try {
         await sendTelegramMessage({
           fetcher: fetch,

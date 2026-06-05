@@ -150,6 +150,7 @@ describe("telegram webhook route", () => {
         message: {
           chat: { id: 456, type: "private" },
           from: { id: 123 },
+          message_thread_id: 1620865,
           text: "Геворг должен 50000"
         }
       })
@@ -160,7 +161,7 @@ describe("telegram webhook route", () => {
       fetcher,
       botToken: "token",
       chatId: 456,
-      text: expect.stringContaining("не смог разобрать"),
+      text: expect.stringContaining("не смог обработать"),
       buttons: []
     });
     await expect(response.json()).resolves.toEqual({

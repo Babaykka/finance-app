@@ -29,7 +29,7 @@ describe("parseDraftCallbackData", () => {
 });
 
 describe("processTelegramUpdate", () => {
-  it("keeps text replies in the same Telegram topic", async () => {
+  it("keeps text replies in the plain chat even when Telegram sends a topic id", async () => {
     const dependencies = createDependencies();
     dependencies.parseMessage.mockResolvedValue({
       id: "draft-topic",
@@ -52,7 +52,6 @@ describe("processTelegramUpdate", () => {
       fetcher: dependencies.fetcher,
       botToken: "token",
       chatId: 456,
-      messageThreadId: 1620865,
       text: "Черновик: Создать долг.",
       buttons: [
         { text: "Сохранить", callbackData: "draft:draft-topic:confirm" },
@@ -63,7 +62,7 @@ describe("processTelegramUpdate", () => {
     expect(result).toEqual({ ok: true, handled: "text" });
   });
 
-  it("uses direct message topic ids for private Telegram topic replies", async () => {
+  it("does not propagate direct message topic ids for private replies", async () => {
     const dependencies = createDependencies();
     dependencies.parseMessage.mockResolvedValue({
       id: "draft-private-topic",
@@ -87,7 +86,6 @@ describe("processTelegramUpdate", () => {
       fetcher: dependencies.fetcher,
       botToken: "token",
       chatId: 456,
-      directMessagesTopicId: 1620865,
       text: "Черновик: Создать долг.",
       buttons: [
         { text: "Сохранить", callbackData: "draft:draft-private-topic:confirm" },
@@ -117,7 +115,6 @@ describe("processTelegramUpdate", () => {
       fetcher: dependencies.fetcher,
       botToken: "token",
       chatId: 456,
-      messageThreadId: 1620850,
       text: expect.stringContaining("Напиши финансовое событие"),
       buttons: []
     });
