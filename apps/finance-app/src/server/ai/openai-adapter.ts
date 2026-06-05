@@ -248,6 +248,8 @@ const normalizeCreateDebtAction = (action: Record<string, unknown>) => {
 const firstNonEmptyString = (...values: unknown[]) =>
   values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
 
+const CANONICAL_CASH_STORAGE_NAME = "Наличные";
+
 const inferAsset = (action: Record<string, unknown>, rawText: string) => {
   if (isOneOf(action.asset, VALID_ASSETS)) {
     return action.asset;
@@ -268,6 +270,17 @@ const inferAsset = (action: Record<string, unknown>, rawText: string) => {
   }
 
   return "RUB";
+};
+
+const normalizeStorageName = (
+  actionName: string,
+  storageType: ReturnType<typeof normalizeStorageType>
+) => {
+  if (storageType === "cash") {
+    return CANONICAL_CASH_STORAGE_NAME;
+  }
+
+  return actionName;
 };
 
 const normalizeStorageType = (action: Record<string, unknown>, rawText: string) => {
@@ -346,9 +359,13 @@ const normalizeAvailability = (
 
 const normalizeCreateStorageAction = (action: Record<string, unknown>, rawText: string) => {
   const storageType = normalizeStorageType(action, rawText);
-  const holderContext =
+  const rawHolderContext =
     firstNonEmptyString(action.holderContext, action.partyName, action.name) ?? "Не указано";
-  const name = firstNonEmptyString(action.name, action.partyName, action.holderContext) ?? holderContext;
+  const rawName =
+    firstNonEmptyString(action.name, action.partyName, action.holderContext) ?? rawHolderContext;
+  const name = normalizeStorageName(rawName, storageType);
+  const holderContext =
+    storageType === "cash" ? CANONICAL_CASH_STORAGE_NAME : rawHolderContext;
   const amount = Number(action.amount);
 
   return {

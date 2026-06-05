@@ -27,6 +27,21 @@ export type AppliedAiActionResult =
   | Awaited<ReturnType<typeof recordDebtPayment>>;
 
 const dateOnlyToUtcDate = (dateOnly: string) => new Date(`${dateOnly}T00:00:00.000Z`);
+const CANONICAL_CASH_STORAGE_NAME = "Наличные";
+
+type CreateStoragePlaceAction = Extract<AiAction, { type: "create_storage_place" }>;
+
+const normalizeStorageActionForApplication = (action: CreateStoragePlaceAction) => {
+  if (action.storageType !== "cash") {
+    return action;
+  }
+
+  return {
+    ...action,
+    name: CANONICAL_CASH_STORAGE_NAME,
+    holderContext: CANONICAL_CASH_STORAGE_NAME
+  };
+};
 
 const requireStorageDb = (db: ActionApplicationDb): StorageServiceDb => {
   if (!db.storagePlace || !db.auditLog) {
@@ -50,25 +65,27 @@ const applyAiAction = (
   action: AiAction
 ): Promise<AppliedAiActionResult> => {
   if (action.type === "create_storage_place") {
+    const storageAction = normalizeStorageActionForApplication(action);
+
     return createStoragePlace(requireStorageDb(db), {
       ownerId: input.ownerId,
       actor: input.actor,
       source: input.source,
-      name: action.name,
-      type: action.storageType,
-      subtype: action.subtype,
-      holderContext: action.holderContext,
-      asset: action.asset,
-      amount: action.amount,
-      amountKind: action.amountKind,
-      availability: action.availability,
-      ...(action.rate !== undefined ? { rate: action.rate } : {}),
-      ...(action.interestPaymentDay !== undefined
-        ? { interestPaymentDay: action.interestPaymentDay }
+      name: storageAction.name,
+      type: storageAction.storageType,
+      subtype: storageAction.subtype,
+      holderContext: storageAction.holderContext,
+      asset: storageAction.asset,
+      amount: storageAction.amount,
+      amountKind: storageAction.amountKind,
+      availability: storageAction.availability,
+      ...(storageAction.rate !== undefined ? { rate: storageAction.rate } : {}),
+      ...(storageAction.interestPaymentDay !== undefined
+        ? { interestPaymentDay: storageAction.interestPaymentDay }
         : {}),
-      status: action.storageType === "trusted_person" ? "check" : "active",
-      attentionPriority: action.attentionPriority,
-      ...(action.comment !== undefined ? { comment: action.comment } : {})
+      status: storageAction.storageType === "trusted_person" ? "check" : "active",
+      attentionPriority: storageAction.attentionPriority,
+      ...(storageAction.comment !== undefined ? { comment: storageAction.comment } : {})
     });
   }
 

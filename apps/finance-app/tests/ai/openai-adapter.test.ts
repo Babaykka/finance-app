@@ -318,6 +318,54 @@ describe("OpenAI parser adapter", () => {
     ]);
   });
 
+  it("normalizes awkward cash storage names into a clean cash place name", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.9,
+        summary: "Пользователь сообщил о наличии наличных в размере 90 000 рублей.",
+        actions: [
+          {
+            type: "create_storage_place",
+            name: "Нал Cash",
+            storageType: "cash",
+            subtype: "not_applicable",
+            holderContext: "Нал Cash",
+            asset: "RUB",
+            amount: 90000,
+            amountKind: "exact",
+            availability: "immediate",
+            attentionPriority: "medium"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "кошелек наличка у меня 90k рублей",
+      context: {
+        todayIso: "2026-06-05",
+        timezone: "Europe/Moscow",
+        knownDebts: [],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions[0]).toEqual({
+      type: "create_storage_place",
+      name: "Наличные",
+      storageType: "cash",
+      subtype: "not_applicable",
+      holderContext: "Наличные",
+      asset: "RUB",
+      amount: 90000,
+      amountKind: "exact",
+      availability: "immediate",
+      attentionPriority: "medium"
+    });
+  });
+
   it("rejects missing response output text", async () => {
     const create = vi.fn().mockResolvedValue({ output_text: "" });
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");

@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => {
   const downloadTelegramVoiceFile = vi.fn();
   const transcribeAudioFile = vi.fn();
   const getOpenAiClient = vi.fn();
+  const confirmAiDraftRoute = vi.fn();
+  const rejectAiDraftRoute = vi.fn();
   const openAiClient = { name: "openai-client" };
 
   return {
@@ -19,6 +21,8 @@ const mocks = vi.hoisted(() => {
     downloadTelegramVoiceFile,
     transcribeAudioFile,
     getOpenAiClient,
+    confirmAiDraftRoute,
+    rejectAiDraftRoute,
     openAiClient
   };
 });
@@ -46,6 +50,14 @@ vi.mock("@/server/ai/transcription", () => ({
 
 vi.mock("@/server/ai/openai-adapter", () => ({
   getOpenAiClient: mocks.getOpenAiClient
+}));
+
+vi.mock("@/app/api/ai-drafts/[id]/confirm/route", () => ({
+  POST: mocks.confirmAiDraftRoute
+}));
+
+vi.mock("@/app/api/ai-drafts/[id]/reject/route", () => ({
+  POST: mocks.rejectAiDraftRoute
 }));
 
 const telegramWebhookRequest = (body: unknown, secret = "secret") =>
@@ -300,12 +312,11 @@ describe("telegram webhook route", () => {
   });
 
   it("confirms drafts from callback buttons", async () => {
-    const fetcher = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: vi.fn().mockResolvedValue({ draftId: "draft-1", applied: 1 })
-    });
+    const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
+    mocks.confirmAiDraftRoute.mockResolvedValue(
+      Response.json({ draftId: "draft-1", applied: 1 })
+    );
 
     const response = await POST(
       telegramWebhookRequest({
@@ -318,9 +329,12 @@ describe("telegram webhook route", () => {
       })
     );
 
-    expect(fetcher).toHaveBeenCalledWith("http://localhost/api/ai-drafts/draft-1/confirm", {
-      method: "POST",
-      headers: { "X-Finance-Internal-Secret": "secret" }
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(mocks.confirmAiDraftRoute).toHaveBeenCalledWith(expect.any(Request), {
+      params: expect.any(Promise)
+    });
+    await expect(mocks.confirmAiDraftRoute.mock.calls[0]?.[1].params).resolves.toEqual({
+      id: "draft-1"
     });
     expect(mocks.answerTelegramCallbackQuery).toHaveBeenCalledWith({
       fetcher,

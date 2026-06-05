@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { OpenAiTranscriptionClient } from "@/server/ai/transcription";
-import { INTERNAL_SECRET_HEADER } from "@/server/auth/internal-access";
 import { processTelegramUpdate, TelegramUpdateSchema } from "@/server/telegram/update";
 
 const DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
+type DraftMutationRouteHandler = (
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) => Promise<Response>;
 
 const getRouteDependencies = async () => {
   const [
@@ -13,14 +16,18 @@ const getRouteDependencies = async () => {
     { answerTelegramAssistantMessage },
     { transcribeAudioFile },
     { answerTelegramCallbackQuery, sendTelegramMessage },
-    { downloadTelegramVoiceFile }
+    { downloadTelegramVoiceFile },
+    { POST: confirmAiDraftRoute },
+    { POST: rejectAiDraftRoute }
   ] = await Promise.all([
     import("@/server/ai/openai-adapter"),
     import("@/server/services/parse-message-service"),
     import("@/server/services/assistant-message-service"),
     import("@/server/ai/transcription"),
     import("@/server/telegram/client"),
-    import("@/server/telegram/voice")
+    import("@/server/telegram/voice"),
+    import("@/app/api/ai-drafts/[id]/confirm/route"),
+    import("@/app/api/ai-drafts/[id]/reject/route")
   ]);
 
   return {
@@ -30,7 +37,9 @@ const getRouteDependencies = async () => {
     transcribeAudioFile,
     answerTelegramCallbackQuery,
     sendTelegramMessage,
-    downloadTelegramVoiceFile
+    downloadTelegramVoiceFile,
+    confirmAiDraftRoute: confirmAiDraftRoute as DraftMutationRouteHandler,
+    rejectAiDraftRoute: rejectAiDraftRoute as DraftMutationRouteHandler
   };
 };
 
@@ -57,19 +66,12 @@ const validateWebhookSecret = (request: Request) => {
   return null;
 };
 
-const getInternalAccessHeaders = (): Record<string, string> => {
-  const internalSecret = process.env.INTERNAL_API_SECRET ?? process.env.TELEGRAM_WEBHOOK_SECRET;
-
-  return internalSecret ? { [INTERNAL_SECRET_HEADER]: internalSecret } : {};
-};
-
-const postToLocalRoute = async (request: Request, path: string) => {
-  const response = await fetch(new URL(path, request.url).toString(), {
-    method: "POST",
-    headers: getInternalAccessHeaders()
+const callDraftMutationRoute = async (handler: DraftMutationRouteHandler, draftId: string) => {
+  const response = await handler(new Request("http://finance-app.internal"), {
+    params: Promise.resolve({ id: draftId })
   });
-
   let body: unknown;
+
   try {
     body = await response.json();
   } catch {
@@ -101,9 +103,11 @@ export async function POST(request: Request) {
   const {
     answerTelegramCallbackQuery,
     answerTelegramAssistantMessage,
+    confirmAiDraftRoute,
     createDraftFromParsedMessage,
     downloadTelegramVoiceFile,
     getOpenAiClient,
+    rejectAiDraftRoute,
     sendTelegramMessage,
     transcribeAudioFile
   } = await getRouteDependencies();
@@ -121,10 +125,8 @@ export async function POST(request: Request) {
       transcribeModel: process.env.OPENAI_TRANSCRIBE_MODEL ?? DEFAULT_TRANSCRIBE_MODEL,
       parseMessage: createDraftFromParsedMessage,
       answerMessage: answerTelegramAssistantMessage,
-      confirmDraft: (draftId) =>
-        postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/confirm`),
-      rejectDraft: (draftId) =>
-        postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/reject`),
+      confirmDraft: (draftId) => callDraftMutationRoute(confirmAiDraftRoute, draftId),
+      rejectDraft: (draftId) => callDraftMutationRoute(rejectAiDraftRoute, draftId),
       sendTelegramMessage: sendUserVisibleTelegramMessage,
       answerTelegramCallbackQuery,
       downloadTelegramVoiceFile,

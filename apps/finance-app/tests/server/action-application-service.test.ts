@@ -93,6 +93,45 @@ describe("applyAiActions", () => {
     expect(tx.storagePlace.create).toHaveBeenCalledOnce();
   });
 
+  it("cleans awkward cash storage names when applying existing drafts", async () => {
+    const db = {
+      storagePlace: {
+        create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Наличные" })
+      },
+      auditLog: {
+        create: vi.fn().mockResolvedValue({ id: "audit-1" })
+      }
+    };
+
+    await applyAiActions(db, {
+      ownerId: "owner-1",
+      actor: "telegram:123",
+      source: "telegram_text",
+      actions: [
+        {
+          type: "create_storage_place",
+          name: "Нал Cash",
+          storageType: "cash",
+          subtype: "not_applicable",
+          holderContext: "Нал Cash",
+          asset: "RUB",
+          amount: 90000,
+          amountKind: "exact",
+          availability: "immediate",
+          attentionPriority: "medium"
+        }
+      ]
+    });
+
+    expect(db.storagePlace.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        name: "Наличные",
+        holderContext: "Наличные",
+        type: "cash"
+      })
+    });
+  });
+
   it("maps create_debt due dates to planned payments", async () => {
     const db = {
       debt: {
