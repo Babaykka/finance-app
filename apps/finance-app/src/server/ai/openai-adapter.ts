@@ -14,6 +14,8 @@ const SYSTEM_PROMPT = [
   "7. Верхний JSON всегда должен содержать confidence, summary, actions, needsClarification.",
   "8. Для record_debt_payment всегда используй поле paymentDate, не paidAt/date.",
   "9. Для create_debt всегда заполняй debtType, basis, status и attentionPriority.",
+  "10. Если пользователь пишет, что его деньги есть/лежат/хранятся у другого человека, это create_storage_place со storageType trusted_person, а не create_debt.",
+  "11. Создавай create_debt только когда явно сказано, что человек должен пользователю, обязан вернуть/оплатить, есть долг, заказ, работа или рассрочка.",
   "Формат ответа:",
   JSON.stringify({
     confidence: 0.9,
@@ -60,6 +62,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const VALID_DEBT_TYPES = ["personal_debt", "work_receivable"] as const;
+const VALID_ASSETS = ["RUB", "AMD", "USDT", "BTC", "ETH", "OTHER_CRYPTO"] as const;
 const VALID_DEBT_STATUSES = [
   "no_agreement",
   "negotiating",
@@ -79,6 +82,48 @@ const getStringValues = (action: Record<string, unknown>) =>
 
 const hasAny = (values: string[], needles: string[]) =>
   values.some((value) => needles.some((needle) => value.includes(needle)));
+
+const normalizeIntentText = (value: string) =>
+  value
+    .toLocaleLowerCase("ru-RU")
+    .replaceAll("ё", "е")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const hasExplicitDebtIntent = (text: string) =>
+  hasAny([normalizeIntentText(text)], [
+    "долг",
+    "долж",
+    "вернуть",
+    "вернул",
+    "возврат",
+    "оплат",
+    "заказ",
+    "клиент",
+    "диплом",
+    "работ",
+    "займ",
+    "заем",
+    "занял",
+    "одолж",
+    "рассроч"
+  ]);
+
+const hasTrustedPersonStorageIntent = (text: string) => {
+  const normalized = normalizeIntentText(text);
+
+  return [
+    /(?:^|[\s,.;:!?])у\s+[a-zа-я0-9][^,.;:!?]{0,60}\s+у\s+меня\s+(?:есть|лежит|лежат|хранится|хранятся|находится|находятся)?(?:\s|$)/u,
+    /\bмои\s+деньги\s+(?:у|на\s+(?:карте|счете|счету)\s+у)\s+/u,
+    /\b(?:лежит|лежат|хранится|хранятся|находится|находятся)\s+у\s+[a-zа-я]/u,
+    /\bна\s+(?:карте|счете|счету|банковском\s+счете)\s+у\s+[a-zа-я]/u
+  ].some((pattern) => pattern.test(normalized));
+};
+
+const shouldTreatAsTrustedPersonStorage = (text: string, action: Record<string, unknown>) =>
+  action.type === "create_debt" &&
+  hasTrustedPersonStorageIntent(text) &&
+  !hasExplicitDebtIntent(text);
 
 const normalizeDebtType = (action: Record<string, unknown>) => {
   if (isOneOf(action.debtType, VALID_DEBT_TYPES)) {
@@ -179,15 +224,63 @@ const normalizeCreateDebtAction = (action: Record<string, unknown>) => {
   };
 };
 
-function normalizeLooseParserJson(json: unknown, todayIso: string): unknown {
+const toTrustedPersonStorageAction = (action: Record<string, unknown>) => {
+  const partyName = typeof action.partyName === "string" ? action.partyName.trim() : "";
+  const amount = Number(action.amount);
+
+  if (
+    partyName.length === 0 ||
+    !Number.isFinite(amount) ||
+    amount < 0 ||
+    !isOneOf(action.asset, VALID_ASSETS)
+  ) {
+    return action;
+  }
+
+  return {
+    type: "create_storage_place",
+    name: partyName,
+    storageType: "trusted_person",
+    subtype: "not_applicable",
+    holderContext: partyName,
+    asset: action.asset,
+    amount,
+    amountKind: "exact",
+    availability: "restricted",
+    attentionPriority: normalizeAttentionPriority(action),
+    comment:
+      typeof action.comment === "string" && action.comment.trim().length > 0
+        ? action.comment.trim()
+        : `Мои деньги находятся у этого человека; хранитель: ${partyName}.`
+  };
+};
+
+const buildTrustedPersonStorageSummary = (action: Record<string, unknown>) => {
+  const name = typeof action.name === "string" ? action.name : "человек";
+  const amount = typeof action.amount === "number" ? action.amount : "сумма";
+  const asset = typeof action.asset === "string" ? action.asset : "актив";
+
+  return `Добавить место хранения: ${name}, ${amount} ${asset}.`;
+};
+
+function normalizeLooseParserJson(json: unknown, todayIso: string, rawText: string): unknown {
   if (!isRecord(json)) {
     return json;
   }
 
+  let firstTrustedPersonStorageAction: Record<string, unknown> | null = null;
   const actions = Array.isArray(json.actions)
     ? json.actions.map((action) => {
         if (!isRecord(action)) {
           return action;
+        }
+
+        if (shouldTreatAsTrustedPersonStorage(rawText, action)) {
+          const storageAction = toTrustedPersonStorageAction(action);
+          if (isRecord(storageAction) && storageAction.type === "create_storage_place") {
+            firstTrustedPersonStorageAction ??= storageAction;
+          }
+          return storageAction;
         }
 
         if (action.type === "create_debt") {
@@ -207,7 +300,10 @@ function normalizeLooseParserJson(json: unknown, todayIso: string): unknown {
 
   return {
     confidence: json.confidence ?? 0.7,
-    summary: json.summary ?? "AI создал черновик финансового действия.",
+    summary:
+      firstTrustedPersonStorageAction !== null
+        ? buildTrustedPersonStorageSummary(firstTrustedPersonStorageAction)
+        : (json.summary ?? "AI создал черновик финансового действия."),
     actions,
     needsClarification: json.needsClarification ?? []
   };
@@ -242,7 +338,7 @@ export function createOpenAiParser(client: OpenAiParserClient, model: string): A
         throw new Error("OpenAI parser response must be valid JSON", { cause: error });
       }
 
-      return parseAiJson(normalizeLooseParserJson(parsedJson, input.context.todayIso));
+      return parseAiJson(normalizeLooseParserJson(parsedJson, input.context.todayIso, input.text));
     }
   };
 }

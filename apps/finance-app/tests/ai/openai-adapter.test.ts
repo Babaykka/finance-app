@@ -222,6 +222,56 @@ describe("OpenAI parser adapter", () => {
     ]);
   });
 
+  it("treats money kept by another person as storage even if AI labels it as debt", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.9,
+        summary: "Добавление нового долга к Абелу на сумму 100000 рублей.",
+        actions: [
+          {
+            type: "create_debt",
+            partyName: "Абел",
+            debtType: "personal_debt",
+            basis: "личный долг",
+            amount: 100000,
+            asset: "RUB",
+            status: "no_agreement",
+            attentionPriority: "medium"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "У Абела у меня есть 100к рублей",
+      context: {
+        todayIso: "2026-06-05",
+        timezone: "Europe/Moscow",
+        knownDebts: [],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.summary).toBe("Добавить место хранения: Абел, 100000 RUB.");
+    expect(result.actions).toEqual([
+      {
+        type: "create_storage_place",
+        name: "Абел",
+        storageType: "trusted_person",
+        subtype: "not_applicable",
+        holderContext: "Абел",
+        asset: "RUB",
+        amount: 100000,
+        amountKind: "exact",
+        availability: "restricted",
+        attentionPriority: "medium",
+        comment: "Мои деньги находятся у этого человека; хранитель: Абел."
+      }
+    ]);
+  });
+
   it("rejects missing response output text", async () => {
     const create = vi.fn().mockResolvedValue({ output_text: "" });
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
