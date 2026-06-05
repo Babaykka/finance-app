@@ -14,12 +14,14 @@ const getRouteDependencies = async () => {
   const [
     { getOpenAiClient },
     { createDraftFromParsedMessage },
+    { answerTelegramAssistantMessage },
     { transcribeAudioFile },
     { answerTelegramCallbackQuery, sendTelegramMessage },
     { downloadTelegramVoiceFile }
   ] = await Promise.all([
     import("@/server/ai/openai-adapter"),
     import("@/server/services/parse-message-service"),
+    import("@/server/services/assistant-message-service"),
     import("@/server/ai/transcription"),
     import("@/server/telegram/client"),
     import("@/server/telegram/voice")
@@ -27,6 +29,7 @@ const getRouteDependencies = async () => {
 
   return {
     createDraftFromParsedMessage,
+    answerTelegramAssistantMessage,
     getOpenAiClient,
     transcribeAudioFile,
     answerTelegramCallbackQuery,
@@ -112,6 +115,7 @@ export async function POST(request: Request) {
   const botToken = getRequiredBotToken();
   const {
     answerTelegramCallbackQuery,
+    answerTelegramAssistantMessage,
     createDraftFromParsedMessage,
     downloadTelegramVoiceFile,
     getOpenAiClient,
@@ -133,6 +137,7 @@ export async function POST(request: Request) {
       allowedUserId: process.env.TELEGRAM_ALLOWED_USER_ID,
       transcribeModel: process.env.OPENAI_TRANSCRIBE_MODEL ?? DEFAULT_TRANSCRIBE_MODEL,
       parseMessage: createDraftFromParsedMessage,
+      answerMessage: answerTelegramAssistantMessage,
       confirmDraft: (draftId) =>
         postToLocalRoute(request, `/api/ai-drafts/${encodeURIComponent(draftId)}/confirm`),
       rejectDraft: (draftId) =>
@@ -143,7 +148,8 @@ export async function POST(request: Request) {
       transcribeAudioFile: (client, input) => transcribeAudioFile(client, input),
       getOpenAiClient: () => getOpenAiClient() as unknown as OpenAiTranscriptionClient
     });
-  } catch {
+  } catch (error) {
+    console.warn("Telegram update processing failed:", error);
     const target = getTelegramReplyTarget(update);
     if (target && !userVisibleReplySent) {
       try {

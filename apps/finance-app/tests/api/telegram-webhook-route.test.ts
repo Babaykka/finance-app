@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => {
   const sendTelegramMessage = vi.fn();
   const answerTelegramCallbackQuery = vi.fn();
   const createDraftFromParsedMessage = vi.fn();
+  const answerTelegramAssistantMessage = vi.fn();
   const downloadTelegramVoiceFile = vi.fn();
   const transcribeAudioFile = vi.fn();
   const getOpenAiClient = vi.fn();
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => {
     sendTelegramMessage,
     answerTelegramCallbackQuery,
     createDraftFromParsedMessage,
+    answerTelegramAssistantMessage,
     downloadTelegramVoiceFile,
     transcribeAudioFile,
     getOpenAiClient,
@@ -28,6 +30,10 @@ vi.mock("@/server/telegram/client", () => ({
 
 vi.mock("@/server/services/parse-message-service", () => ({
   createDraftFromParsedMessage: mocks.createDraftFromParsedMessage
+}));
+
+vi.mock("@/server/services/assistant-message-service", () => ({
+  answerTelegramAssistantMessage: mocks.answerTelegramAssistantMessage
 }));
 
 vi.mock("@/server/telegram/voice", () => ({
@@ -54,6 +60,7 @@ const expectNoDownstreamCalls = (fetcher: ReturnType<typeof vi.fn>) => {
   expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
   expect(mocks.answerTelegramCallbackQuery).not.toHaveBeenCalled();
   expect(mocks.createDraftFromParsedMessage).not.toHaveBeenCalled();
+  expect(mocks.answerTelegramAssistantMessage).not.toHaveBeenCalled();
   expect(mocks.downloadTelegramVoiceFile).not.toHaveBeenCalled();
   expect(mocks.getOpenAiClient).not.toHaveBeenCalled();
   expect(mocks.transcribeAudioFile).not.toHaveBeenCalled();
@@ -168,6 +175,39 @@ describe("telegram webhook route", () => {
       ok: false,
       error: "Telegram update processing failed"
     });
+  });
+
+  it("handles assistant replies without creating drafts", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    mocks.answerTelegramAssistantMessage.mockResolvedValue({
+      text: "У тебя сейчас 1 928 187 RUB в местах хранения."
+    });
+
+    const response = await POST(
+      telegramWebhookRequest({
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "Сколько у меня денег?"
+        }
+      })
+    );
+
+    expect(mocks.createDraftFromParsedMessage).not.toHaveBeenCalled();
+    expect(mocks.answerTelegramAssistantMessage).toHaveBeenCalledWith({
+      text: "Сколько у меня денег?",
+      telegramUserId: "123",
+      source: "telegram_text"
+    });
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "У тебя сейчас 1 928 187 RUB в местах хранения.",
+      buttons: []
+    });
+    await expect(response.json()).resolves.toEqual({ ok: true, handled: "assistant_reply" });
   });
 
   it("handles voice messages through Telegram download, transcription, parse-message, and reply", async () => {

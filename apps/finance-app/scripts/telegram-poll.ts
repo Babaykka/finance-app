@@ -2,6 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { getOpenAiClient } from "../src/server/ai/openai-adapter";
 import type { OpenAiTranscriptionClient } from "../src/server/ai/transcription";
 import { transcribeAudioFile } from "../src/server/ai/transcription";
+import { answerTelegramAssistantMessage } from "../src/server/services/assistant-message-service";
 import {
   answerTelegramCallbackQuery,
   deleteTelegramWebhook,
@@ -157,6 +158,7 @@ async function main() {
             transcribeModel: optionalEnv("OPENAI_TRANSCRIBE_MODEL"),
             parseMessage: (body) =>
               postJson<DraftResult>(new URL("/api/parse-message", appBaseUrl).toString(), body),
+            answerMessage: answerTelegramAssistantMessage,
             confirmDraft: (draftId) =>
               postDraftMutation(
                 new URL(`/api/ai-drafts/${encodeURIComponent(draftId)}/confirm`, appBaseUrl)

@@ -58,6 +58,17 @@ type ParseMessageInput = {
   transcript?: string;
 };
 
+type AnswerMessageInput = {
+  text: string;
+  telegramUserId: string;
+  source: "telegram_text" | "telegram_voice";
+  transcript?: string;
+};
+
+type AnswerMessageResult = {
+  text: string;
+};
+
 type DraftMutationResult = {
   ok: boolean;
   status: number;
@@ -71,6 +82,7 @@ type ProcessTelegramUpdateInput = {
   allowedUserId?: string;
   transcribeModel?: string;
   parseMessage: (body: ParseMessageInput) => Promise<DraftResult>;
+  answerMessage: (body: AnswerMessageInput) => Promise<AnswerMessageResult>;
   confirmDraft: (draftId: string) => Promise<DraftMutationResult>;
   rejectDraft: (draftId: string) => Promise<DraftMutationResult>;
   sendTelegramMessage: (input: {
@@ -109,7 +121,9 @@ const isAllowedTelegramUser = (telegramUserId: string, allowedUserId?: string) =
 const HELP_TEXT = [
   "Напиши финансовое событие обычным текстом или голосом.",
   "Например: долг Грно 15000 руб до конца июня, друг.",
-  "Я создам черновик, а ты подтвердишь его кнопкой."
+  "Я создам черновик, а ты подтвердишь его кнопкой.",
+  "Еще можно спрашивать: сколько денег, кто должен, где что лежит.",
+  "И можно просто поговорить."
 ].join("\n");
 
 const buildDraftButtons = (draftId: string): TelegramInlineButton[] => [
@@ -152,6 +166,92 @@ const getCommand = (text: string) => {
   }
 
   return null;
+};
+
+const normalizeIntentText = (text: string) =>
+  text
+    .toLocaleLowerCase("ru-RU")
+    .replaceAll("ё", "е")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const QUESTION_STARTERS = [
+  "кто",
+  "сколько",
+  "где",
+  "что",
+  "какой",
+  "какая",
+  "какие",
+  "когда",
+  "почему",
+  "зачем",
+  "как",
+  "покажи",
+  "расскажи",
+  "объясни",
+  "посчитай",
+  "сравни"
+];
+
+const FINANCIAL_ACTION_KEYWORDS = [
+  "долг",
+  "долж",
+  "вернул",
+  "вернула",
+  "вернули",
+  "возврат",
+  "оплат",
+  "заплат",
+  "получил",
+  "получила",
+  "приход",
+  "перевел",
+  "перевела",
+  "перевод",
+  "лежит",
+  "лежат",
+  "хран",
+  "есть",
+  "накоп",
+  "вклад",
+  "карта",
+  "счет",
+  "счёт",
+  "налич",
+  "bybit",
+  "metamask",
+  "usdt",
+  "руб"
+];
+
+const hasAmountLikeValue = (text: string) =>
+  /(?:^|[\s,.;:!?])\d[\d\s.,]*(?:к|тыс|руб|р|₽|usdt|usd|amd|драм|btc|eth)?(?:$|[\s,.;:!?])/u.test(
+    text
+  );
+
+const hasQuestionIntent = (text: string) => {
+  const normalized = normalizeIntentText(text);
+
+  return (
+    normalized.includes("?") ||
+    QUESTION_STARTERS.some(
+      (starter) => normalized === starter || normalized.startsWith(`${starter} `)
+    )
+  );
+};
+
+const shouldCreateDraftFromText = (text: string) => {
+  const normalized = normalizeIntentText(text);
+
+  if (hasQuestionIntent(normalized)) {
+    return false;
+  }
+
+  return (
+    hasAmountLikeValue(normalized) &&
+    FINANCIAL_ACTION_KEYWORDS.some((keyword) => normalized.includes(keyword))
+  );
 };
 
 const messageTarget = (message: TelegramMessage) => ({
@@ -203,9 +303,40 @@ async function processTextMessage(input: ProcessTelegramUpdateInput, message: Te
     return { ok: true, handled: "command" as const, command };
   }
 
-  const draft = await input.parseMessage({
+  return processNaturalLanguageMessage(input, message, {
     text: message.text ?? "",
     source: "telegram_text"
+  });
+}
+
+async function processNaturalLanguageMessage(
+  input: ProcessTelegramUpdateInput,
+  message: TelegramMessage,
+  content: ParseMessageInput
+) {
+  if (!shouldCreateDraftFromText(content.text)) {
+    const answer = await input.answerMessage({
+      text: content.text,
+      telegramUserId: String(message.from.id),
+      source: content.source,
+      ...(content.transcript ? { transcript: content.transcript } : {})
+    });
+
+    await input.sendTelegramMessage({
+      fetcher: input.fetcher,
+      botToken: input.botToken,
+      ...messageTarget(message),
+      text: answer.text,
+      buttons: []
+    });
+
+    return { ok: true, handled: "assistant_reply" as const };
+  }
+
+  const draft = await input.parseMessage({
+    text: content.text,
+    source: content.source,
+    ...(content.transcript ? { transcript: content.transcript } : {})
   });
   const response = buildTelegramDraftConfirmation(draft);
 
@@ -217,7 +348,7 @@ async function processTextMessage(input: ProcessTelegramUpdateInput, message: Te
     buttons: response.buttons
   });
 
-  return { ok: true, handled: "text" as const };
+  return { ok: true, handled: content.source === "telegram_voice" ? ("voice" as const) : ("text" as const) };
 }
 
 async function processVoiceMessage(input: ProcessTelegramUpdateInput, message: TelegramMessage) {
@@ -236,22 +367,14 @@ async function processVoiceMessage(input: ProcessTelegramUpdateInput, message: T
     model: input.transcribeModel ?? DEFAULT_TRANSCRIBE_MODEL,
     language: "ru"
   });
-  const draft = await input.parseMessage({
+
+  const result = await processNaturalLanguageMessage(input, message, {
     text: transcript,
     transcript,
     source: "telegram_voice"
   });
-  const response = buildTelegramDraftConfirmation(draft);
 
-  await input.sendTelegramMessage({
-    fetcher: input.fetcher,
-    botToken: input.botToken,
-    ...messageTarget(message),
-    text: response.text,
-    buttons: response.buttons
-  });
-
-  return { ok: true, handled: "voice" as const, telegramUserId: String(message.from.id) };
+  return result.handled === "voice" ? { ...result, telegramUserId: String(message.from.id) } : result;
 }
 
 async function notifyDraftMutationFailure(

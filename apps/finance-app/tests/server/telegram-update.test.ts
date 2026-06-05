@@ -6,6 +6,7 @@ const createDependencies = () => ({
   botToken: "token",
   allowedUserId: "123",
   parseMessage: vi.fn(),
+  answerMessage: vi.fn(),
   confirmDraft: vi.fn(),
   rejectDraft: vi.fn(),
   sendTelegramMessage: vi.fn(),
@@ -111,6 +112,7 @@ describe("processTelegramUpdate", () => {
     });
 
     expect(dependencies.parseMessage).not.toHaveBeenCalled();
+    expect(dependencies.answerMessage).not.toHaveBeenCalled();
     expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
       fetcher: dependencies.fetcher,
       botToken: "token",
@@ -119,6 +121,72 @@ describe("processTelegramUpdate", () => {
       buttons: []
     });
     expect(result).toEqual({ ok: true, handled: "command", command: "start" });
+  });
+
+  it("answers finance questions without creating a draft", async () => {
+    const dependencies = createDependencies();
+    dependencies.answerMessage.mockResolvedValue({
+      text: "У тебя 1 928 187 RUB в местах хранения и 91 500 RUB к получению."
+    });
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "Сколько у меня денег?"
+        }
+      }
+    });
+
+    expect(dependencies.parseMessage).not.toHaveBeenCalled();
+    expect(dependencies.answerMessage).toHaveBeenCalledWith({
+      text: "Сколько у меня денег?",
+      telegramUserId: "123",
+      source: "telegram_text"
+    });
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "У тебя 1 928 187 RUB в местах хранения и 91 500 RUB к получению.",
+      buttons: []
+    });
+    expect(result).toEqual({ ok: true, handled: "assistant_reply" });
+  });
+
+  it("answers casual messages without creating a draft", async () => {
+    const dependencies = createDependencies();
+    dependencies.answerMessage.mockResolvedValue({
+      text: "Я на месте. Можем разобрать финансы или просто поговорить."
+    });
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "как дела?"
+        }
+      }
+    });
+
+    expect(dependencies.parseMessage).not.toHaveBeenCalled();
+    expect(dependencies.answerMessage).toHaveBeenCalledWith({
+      text: "как дела?",
+      telegramUserId: "123",
+      source: "telegram_text"
+    });
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Я на месте. Можем разобрать финансы или просто поговорить.",
+      buttons: []
+    });
+    expect(result).toEqual({ ok: true, handled: "assistant_reply" });
   });
 
   it("confirms a draft from an inline callback button and replies in Telegram", async () => {
