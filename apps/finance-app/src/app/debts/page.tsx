@@ -1,10 +1,32 @@
 import { CalendarClock, HandCoins } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { DataUnavailable } from "@/components/DataUnavailable";
+import { SortControls } from "@/components/SortControls";
 import { formatMoney } from "@/domain/money";
-import { getDebtTypeLabel, getFinanceViewData, getStatusLabel } from "@/server/ui/finance-view-data";
+import {
+  type DebtSort,
+  getDebtTypeLabel,
+  getFinanceViewData,
+  getStatusLabel,
+  sortDebtsForView
+} from "@/server/ui/finance-view-data";
 
 export const dynamic = "force-dynamic";
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+const DEBT_SORT_OPTIONS: Array<{ value: DebtSort; label: string }> = [
+  { value: "due_asc", label: "Срок" },
+  { value: "amount_desc", label: "Сумма" },
+  { value: "attention", label: "Важное" },
+  { value: "name_asc", label: "Имя" }
+];
+
+const normalizeDebtSort = (value: string | string[] | undefined): DebtSort => {
+  const raw = Array.isArray(value) ? value[0] : value;
+
+  return DEBT_SORT_OPTIONS.some((option) => option.value === raw) ? (raw as DebtSort) : "due_asc";
+};
 
 const formatDate = (date: string | null) => {
   if (!date) {
@@ -30,8 +52,10 @@ const getStatusClassName = (status: string) => {
   return "pill";
 };
 
-export default async function DebtsPage() {
+export default async function DebtsPage({ searchParams }: { searchParams?: SearchParams }) {
   const data = await getFinanceViewData();
+  const sort = normalizeDebtSort((await searchParams)?.sort);
+  const debts = sortDebtsForView(data.debts, sort);
 
   return (
     <AppShell active="debts" subtitle={data.ownerName} title="Долги">
@@ -45,9 +69,17 @@ export default async function DebtsPage() {
         </div>
         {data.isReady ? null : <DataUnavailable />}
 
-        {data.debts.length > 0 ? (
+        <SortControls
+          basePath="/debts"
+          current={sort}
+          defaultValue="due_asc"
+          label="Сортировка долгов"
+          options={DEBT_SORT_OPTIONS}
+        />
+
+        {debts.length > 0 ? (
           <div className="item-list">
-            {data.debts.map((debt) => (
+            {debts.map((debt) => (
               <article className="item-card" key={debt.id}>
                 <div className="item-main">
                   <div>

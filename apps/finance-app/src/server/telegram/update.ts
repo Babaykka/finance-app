@@ -205,6 +205,11 @@ const FINANCIAL_ACTION_KEYWORDS = [
   "заплат",
   "получил",
   "получила",
+  "добав",
+  "учти",
+  "запиши",
+  "зафикс",
+  "обнов",
   "приход",
   "перевел",
   "перевела",
@@ -219,6 +224,10 @@ const FINANCIAL_ACTION_KEYWORDS = [
   "счет",
   "счёт",
   "налич",
+  "втб",
+  "сбер",
+  "тбанк",
+  "альфа",
   "bybit",
   "metamask",
   "usdt",
@@ -226,7 +235,7 @@ const FINANCIAL_ACTION_KEYWORDS = [
 ];
 
 const hasAmountLikeValue = (text: string) =>
-  /(?:^|[\s,.;:!?])\d[\d\s.,]*(?:к|тыс|руб|р|₽|usdt|usd|amd|драм|btc|eth)?(?:$|[\s,.;:!?])/u.test(
+  /(?:^|[\s,.;:!?])\d[\d\s.,]*(?:[kк]|тыс|руб|р|₽|usdt|usd|amd|драм|btc|eth|%)?(?:$|[\s,.;:!?%])/u.test(
     text
   );
 

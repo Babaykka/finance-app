@@ -156,6 +156,43 @@ describe("processTelegramUpdate", () => {
     expect(result).toEqual({ ok: true, handled: "assistant_reply" });
   });
 
+  it("creates drafts for polite add requests with latin k amounts", async () => {
+    const dependencies = createDependencies();
+    dependencies.parseMessage.mockResolvedValue({
+      id: "draft-add-storage",
+      parsedActions: { summary: "Добавить ВТБ 280 000 RUB под 0%." }
+    });
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "можешь добавить что у меня 280k руб в втб под 0%"
+        }
+      }
+    });
+
+    expect(dependencies.answerMessage).not.toHaveBeenCalled();
+    expect(dependencies.parseMessage).toHaveBeenCalledWith({
+      text: "можешь добавить что у меня 280k руб в втб под 0%",
+      source: "telegram_text"
+    });
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Черновик: Добавить ВТБ 280 000 RUB под 0%.",
+      buttons: [
+        { text: "Сохранить", callbackData: "draft:draft-add-storage:confirm" },
+        { text: "Исправить", callbackData: "draft:draft-add-storage:edit" },
+        { text: "Отмена", callbackData: "draft:draft-add-storage:reject" }
+      ]
+    });
+    expect(result).toEqual({ ok: true, handled: "text" });
+  });
+
   it("answers casual messages without creating a draft", async () => {
     const dependencies = createDependencies();
     dependencies.answerMessage.mockResolvedValue({

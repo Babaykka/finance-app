@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getOpenAiApiKey, normalizeOpenAiApiKey } from "@/server/ai/api-key";
 import { hasInternalAccess } from "@/server/auth/internal-access";
 
-const DEFAULT_PARSE_MODEL = "gpt-4o-mini";
+const DEFAULT_PARSE_MODEL = "gpt-5.2";
 
 const getRouteDependencies = async () => {
   const [{ prisma }, { getLocalOwner }] = await Promise.all([

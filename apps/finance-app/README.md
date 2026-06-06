@@ -23,7 +23,8 @@ npm run dev
 - `TELEGRAM_WEBHOOK_SECRET` - секрет для проверки webhook-запросов Telegram.
 - `TELEGRAM_ALLOWED_USER_ID` - Telegram ID, которому разрешено писать боту.
 - `OPENAI_API_KEY` - ключ OpenAI API для разбора текста и голоса.
-- `OPENAI_PARSE_MODEL` - модель для разбора текстовых финансовых сообщений, по умолчанию `gpt-4o-mini`.
+- `OPENAI_PARSE_MODEL` - модель для разбора текстовых финансовых сообщений, по умолчанию `gpt-5.2`.
+- `OPENAI_ASSISTANT_MODEL` - модель для разговоров с ботом и ответов по финансам, по умолчанию `gpt-5.2`.
 - `APP_BASE_URL` - публичный или локальный URL приложения.
 - `GOOGLE_OAUTH_ACCESS_TOKEN` - OAuth access token для создания Google Sheets export.
 
@@ -114,7 +115,8 @@ npm run telegram:setup
 - `TELEGRAM_ALLOWED_USER_ID`
 - `TELEGRAM_BOT_TOKEN`
 - `OPENAI_API_KEY`
-- `OPENAI_PARSE_MODEL` - можно оставить `gpt-4o-mini`.
+- `OPENAI_PARSE_MODEL` - можно оставить `gpt-5.2` для качества или поставить более дешевую модель.
+- `OPENAI_ASSISTANT_MODEL` - можно оставить `gpt-5.2` для более умного бота.
 
 `TELEGRAM_WEBHOOK_SECRET` генерируется Render автоматически. `APP_BASE_URL` можно не задавать на Render: `telegram:setup` использует `RENDER_EXTERNAL_URL`.
 

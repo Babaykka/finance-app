@@ -245,7 +245,7 @@ describe("parse-message route request schema", () => {
       })
     );
 
-    expect(mocks.createOpenAiParser).toHaveBeenCalledWith(mocks.openAiClient, "gpt-4o-mini");
+    expect(mocks.createOpenAiParser).toHaveBeenCalledWith(mocks.openAiClient, "gpt-5.2");
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(draft);
   });

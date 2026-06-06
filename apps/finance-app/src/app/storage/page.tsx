@@ -1,15 +1,35 @@
 import { Percent, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { DataUnavailable } from "@/components/DataUnavailable";
+import { SortControls } from "@/components/SortControls";
 import { formatMoney } from "@/domain/money";
 import {
+  type StorageSort,
   getAvailabilityLabel,
   getFinanceViewData,
   getStatusLabel,
-  getStorageTypeLabel
+  getStorageTypeLabel,
+  sortStoragePlacesForView
 } from "@/server/ui/finance-view-data";
 
 export const dynamic = "force-dynamic";
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+const STORAGE_SORT_OPTIONS: Array<{ value: StorageSort; label: string }> = [
+  { value: "attention", label: "Важное" },
+  { value: "amount_desc", label: "Сумма" },
+  { value: "rate_desc", label: "Процент" },
+  { value: "name_asc", label: "Имя" }
+];
+
+const normalizeStorageSort = (value: string | string[] | undefined): StorageSort => {
+  const raw = Array.isArray(value) ? value[0] : value;
+
+  return STORAGE_SORT_OPTIONS.some((option) => option.value === raw)
+    ? (raw as StorageSort)
+    : "attention";
+};
 
 export const formatStorageRate = (rate: number | null) => {
   if (rate === null) {
@@ -21,8 +41,10 @@ export const formatStorageRate = (rate: number | null) => {
   }).format(rate)}%`;
 };
 
-export default async function StoragePage() {
+export default async function StoragePage({ searchParams }: { searchParams?: SearchParams }) {
   const data = await getFinanceViewData();
+  const sort = normalizeStorageSort((await searchParams)?.sort);
+  const storagePlaces = sortStoragePlacesForView(data.storagePlaces, sort);
 
   return (
     <AppShell active="storage" subtitle={data.ownerName} title="Хранение">
@@ -36,9 +58,17 @@ export default async function StoragePage() {
         </div>
         {data.isReady ? null : <DataUnavailable />}
 
-        {data.storagePlaces.length > 0 ? (
+        <SortControls
+          basePath="/storage"
+          current={sort}
+          defaultValue="attention"
+          label="Сортировка мест хранения"
+          options={STORAGE_SORT_OPTIONS}
+        />
+
+        {storagePlaces.length > 0 ? (
           <div className="item-list">
-            {data.storagePlaces.map((place) => {
+            {storagePlaces.map((place) => {
               const rate = formatStorageRate(place.rate);
 
               return (

@@ -106,8 +106,52 @@ const sortAssetTotals = (totals: AssetTotalView[]) =>
 const getAttentionRank = (priority: string) =>
   ATTENTION_PRIORITY_RANK[priority as AttentionPriority] ?? -1;
 
-export const sortStoragePlacesForView = (places: StoragePlaceView[]) =>
+export type StorageSort = "attention" | "amount_desc" | "rate_desc" | "name_asc";
+export type DebtSort = "due_asc" | "amount_desc" | "attention" | "name_asc";
+
+const compareNullableDate = (left: string | null, right: string | null) => {
+  if (left === null && right === null) {
+    return 0;
+  }
+
+  if (left === null) {
+    return 1;
+  }
+
+  if (right === null) {
+    return -1;
+  }
+
+  return left.localeCompare(right);
+};
+
+export const sortStoragePlacesForView = (
+  places: StoragePlaceView[],
+  sort: StorageSort = "attention"
+) =>
   [...places].sort((left, right) => {
+    if (sort === "amount_desc") {
+      const amountDiff = right.amount - left.amount;
+
+      if (amountDiff !== 0) {
+        return amountDiff;
+      }
+    }
+
+    if (sort === "rate_desc") {
+      const leftRate = left.rate ?? -1;
+      const rightRate = right.rate ?? -1;
+      const rateDiff = rightRate - leftRate;
+
+      if (rateDiff !== 0) {
+        return rateDiff;
+      }
+    }
+
+    if (sort === "name_asc") {
+      return left.name.localeCompare(right.name, "ru");
+    }
+
     const rankDiff = getAttentionRank(right.attentionPriority) - getAttentionRank(left.attentionPriority);
 
     if (rankDiff !== 0) {
@@ -115,6 +159,37 @@ export const sortStoragePlacesForView = (places: StoragePlaceView[]) =>
     }
 
     return left.name.localeCompare(right.name, "ru");
+  });
+
+export const sortDebtsForView = (debts: DebtView[], sort: DebtSort = "due_asc") =>
+  [...debts].sort((left, right) => {
+    if (sort === "amount_desc") {
+      const amountDiff = right.remainingAmount - left.remainingAmount;
+
+      if (amountDiff !== 0) {
+        return amountDiff;
+      }
+    }
+
+    if (sort === "attention") {
+      const rankDiff = getAttentionRank(right.attentionPriority) - getAttentionRank(left.attentionPriority);
+
+      if (rankDiff !== 0) {
+        return rankDiff;
+      }
+    }
+
+    if (sort === "name_asc") {
+      return left.partyName.localeCompare(right.partyName, "ru");
+    }
+
+    const dateDiff = compareNullableDate(left.nextPaymentDate, right.nextPaymentDate);
+
+    if (dateDiff !== 0) {
+      return dateDiff;
+    }
+
+    return left.partyName.localeCompare(right.partyName, "ru");
   });
 
 const isLocalViewSetupError = (error: unknown) =>
@@ -168,6 +243,21 @@ export async function getFinanceViewData(): Promise<FinanceViewData> {
       };
     });
 
+    const debtView = debts.map((debt) => ({
+      id: debt.id,
+      partyName: debt.partyName,
+      type: debt.type,
+      basis: debt.basis,
+      asset: toAsset(debt.asset),
+      originalAmount: toNumber(debt.originalAmount),
+      remainingAmount: toNumber(debt.remainingAmount),
+      status: debt.status,
+      nextPaymentAmount: debt.nextPaymentAmount === null ? null : toNumber(debt.nextPaymentAmount),
+      nextPaymentDate: toIsoDate(debt.nextPaymentDate),
+      attentionPriority: debt.attentionPriority,
+      comment: debt.comment
+    }));
+
     return {
       isReady: true,
       ownerName: owner.displayName,
@@ -175,20 +265,7 @@ export async function getFinanceViewData(): Promise<FinanceViewData> {
         [...assetAmountByCode.entries()].map(([asset, amount]) => ({ asset, amount }))
       ),
       storagePlaces: sortStoragePlacesForView(storageView),
-      debts: debts.map((debt) => ({
-        id: debt.id,
-        partyName: debt.partyName,
-        type: debt.type,
-        basis: debt.basis,
-        asset: toAsset(debt.asset),
-        originalAmount: toNumber(debt.originalAmount),
-        remainingAmount: toNumber(debt.remainingAmount),
-        status: debt.status,
-        nextPaymentAmount: debt.nextPaymentAmount === null ? null : toNumber(debt.nextPaymentAmount),
-        nextPaymentDate: toIsoDate(debt.nextPaymentDate),
-        attentionPriority: debt.attentionPriority,
-        comment: debt.comment
-      })),
+      debts: sortDebtsForView(debtView),
       drafts: drafts.map((draft) => ({
         id: draft.id,
         source: draft.source,

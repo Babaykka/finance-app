@@ -50,6 +50,30 @@ describe("assistant-message-service", () => {
       },
       aiDraft: {
         count: vi.fn().mockResolvedValue(2)
+      },
+      assistantMemory: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            kind: "preference",
+            text: "Наличные всегда называй «Наличные», без смешанных названий."
+          }
+        ])
+      },
+      assistantMessage: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            role: "assistant",
+            source: "telegram_text",
+            text: "Запомнил, наличные буду называть аккуратно.",
+            createdAt: new Date("2026-06-05T10:02:00.000Z")
+          },
+          {
+            role: "user",
+            source: "telegram_text",
+            text: "запомни: наличку называй Наличные",
+            createdAt: new Date("2026-06-05T10:01:00.000Z")
+          }
+        ])
       }
     };
 
@@ -90,9 +114,41 @@ describe("assistant-message-service", () => {
       },
       orderBy: [{ nextPaymentDate: "asc" }, { partyName: "asc" }]
     });
+    expect(db.assistantMemory.findMany).toHaveBeenCalledWith({
+      where: { ownerId: "owner-1", status: "active" },
+      select: { kind: true, text: true },
+      orderBy: { updatedAt: "desc" },
+      take: 30
+    });
+    expect(db.assistantMessage.findMany).toHaveBeenCalledWith({
+      where: { ownerId: "owner-1" },
+      select: { role: true, source: true, text: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 12
+    });
     expect(context).toEqual({
       todayIso: "2026-06-05",
       timezone: "Europe/Moscow",
+      memories: [
+        {
+          kind: "preference",
+          text: "Наличные всегда называй «Наличные», без смешанных названий."
+        }
+      ],
+      recentMessages: [
+        {
+          role: "user",
+          source: "telegram_text",
+          text: "запомни: наличку называй Наличные",
+          createdAt: "2026-06-05T10:01:00.000Z"
+        },
+        {
+          role: "assistant",
+          source: "telegram_text",
+          text: "Запомнил, наличные буду называть аккуратно.",
+          createdAt: "2026-06-05T10:02:00.000Z"
+        }
+      ],
       assetTotals: [
         { asset: "RUB", amount: 268187 },
         { asset: "USDT", amount: 7331 }

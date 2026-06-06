@@ -7,7 +7,7 @@ import { prisma } from "@/server/db";
 import { getLocalOwner } from "@/server/auth/local-owner";
 import { createAiDraft } from "@/server/services/draft-service";
 
-const DEFAULT_PARSE_MODEL = "gpt-4o-mini";
+const DEFAULT_PARSE_MODEL = "gpt-5.2";
 
 export const ParseMessageRequestSchema = z.object({
   text: z.string().trim().min(1),

@@ -21,6 +21,13 @@ export type OpenAiAssistantClient = {
 export type FinanceAssistantContext = {
   todayIso: string;
   timezone: string;
+  memories: Array<{ kind: string; text: string }>;
+  recentMessages: Array<{
+    role: string;
+    source: string;
+    text: string;
+    createdAt: string;
+  }>;
   assetTotals: Array<{ asset: string; amount: number }>;
   storagePlaces: Array<{
     name: string;
@@ -56,6 +63,8 @@ const SYSTEM_PROMPT = [
   "Ты личный финансовый помощник пользователя в Telegram.",
   "Отвечай по-русски, спокойно, коротко и по делу.",
   "Ты можешь отвечать на вопросы по финансам на основе переданного JSON-контекста, а также поддерживать обычный разговор.",
+  "В JSON-контексте есть поля memories и recentMessages: используй их как память о стиле, предпочтениях и последних репликах.",
+  "Не считай memories источником финансовой истины: суммы, долги и места хранения бери из assetTotals, storagePlaces и debts.",
   "Не выдумывай суммы, валюты, даты и договоренности, которых нет в контексте.",
   "Не конвертируй валюты без курса; если валют несколько, перечисляй отдельно.",
   "Если пользователь просит изменить финансы, скажи, что для изменений нужен черновик с кнопкой сохранения.",

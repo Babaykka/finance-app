@@ -83,6 +83,8 @@ button:disabled {
 .item-main,
 .action-row,
 .quick-links,
+.suggestion-row,
+.sort-strip,
 .section-heading {
   display: flex;
   align-items: center;
@@ -168,6 +170,7 @@ button:disabled {
 .summary-card,
 .tool-panel,
 .item-card {
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -222,6 +225,7 @@ button:disabled {
   font-weight: 780;
   line-height: 1.02;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .muted {
@@ -362,6 +366,60 @@ button:disabled {
   flex: 1 1 0;
 }
 
+.suggestion-row {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.suggestion-chip,
+.sort-link {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.suggestion-chip {
+  padding: 0 11px;
+}
+
+.sort-strip {
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 8px;
+  scrollbar-width: none;
+}
+
+.sort-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.sort-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0 13px;
+}
+
+.sort-link-active {
+  border-color: rgba(15, 107, 99, 0.32);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.quick-draft {
+  margin-top: 12px;
+  border: 1px solid rgba(15, 107, 99, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  background: linear-gradient(180deg, var(--accent-soft), rgba(255, 255, 255, 0.78));
+}
+
 .inline-state {
   margin-top: 12px;
   border: 1px solid var(--line);
@@ -397,6 +455,10 @@ button:disabled {
   padding: 14px;
 }
 
+.item-main > div {
+  min-width: 0;
+}
+
 .item-meta {
   display: flex;
   flex-wrap: wrap;
@@ -414,6 +476,10 @@ button:disabled {
 .amount {
   font-size: 19px;
   font-weight: 760;
+  overflow-wrap: anywhere;
+  text-align: right;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .pill {
@@ -528,7 +594,7 @@ button:disabled {
   }
 
   .overview-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .item-list {
@@ -541,6 +607,18 @@ button:disabled {
 
   .metric {
     margin-top: 12px;
+    font-size: 22px;
+  }
+
+  .item-card .item-main {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .item-card .amount {
+    width: 100%;
+    margin-top: 2px;
+    text-align: left;
   }
 
   .tool-panel,

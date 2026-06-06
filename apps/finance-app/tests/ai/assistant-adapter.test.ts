@@ -10,6 +10,15 @@ describe("OpenAI assistant adapter", () => {
     const context = {
       todayIso: "2026-06-05",
       timezone: "Europe/Moscow",
+      memories: [{ kind: "preference", text: "Отвечай коротко и спокойно." }],
+      recentMessages: [
+        {
+          role: "user",
+          source: "telegram_text",
+          text: "запомни: отвечай коротко",
+          createdAt: "2026-06-05T10:00:00.000Z"
+        }
+      ],
       assetTotals: [{ asset: "RUB", amount: 1928187 }],
       storagePlaces: [
         {
@@ -39,7 +48,7 @@ describe("OpenAI assistant adapter", () => {
       input: [
         expect.objectContaining({
           role: "system",
-          content: expect.stringContaining("личный финансовый помощник")
+          content: expect.stringContaining("memories")
         }),
         {
           role: "user",
@@ -63,6 +72,8 @@ describe("OpenAI assistant adapter", () => {
         context: {
           todayIso: "2026-06-05",
           timezone: "Europe/Moscow",
+          memories: [],
+          recentMessages: [],
           assetTotals: [],
           storagePlaces: [],
           debts: [],

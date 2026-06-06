@@ -2,8 +2,9 @@ import { dateToMoscowDateIso, MOSCOW_TIMEZONE } from "@/domain/dates";
 import { createOpenAiAssistantResponder } from "@/server/ai/assistant-adapter";
 import type { FinanceAssistantContext } from "@/server/ai/assistant-adapter";
 import { getOpenAiClient } from "@/server/ai/openai-adapter";
+import { rememberAssistantExchange } from "@/server/services/assistant-memory-service";
 
-const DEFAULT_ASSISTANT_MODEL = "gpt-4o-mini";
+const DEFAULT_ASSISTANT_MODEL = "gpt-5.2";
 
 type DecimalLike = {
   toString(): string;
@@ -44,6 +45,24 @@ type AssistantDb = {
   aiDraft: {
     count(input: unknown): Promise<number>;
   };
+  assistantMemory: {
+    findMany(input: unknown): Promise<
+      Array<{
+        kind: string;
+        text: string;
+      }>
+    >;
+  };
+  assistantMessage: {
+    findMany(input: unknown): Promise<
+      Array<{
+        role: string;
+        source: string;
+        text: string;
+        createdAt: Date | string;
+      }>
+    >;
+  };
 };
 
 const toFiniteNumber = (value: unknown, label: string) => {
@@ -65,6 +84,9 @@ const toIsoDate = (value: Date | string | null) => {
   return typeof value === "string" ? value.slice(0, 10) : value.toISOString().slice(0, 10);
 };
 
+const toIsoDateTime = (value: Date | string) =>
+  typeof value === "string" ? new Date(value).toISOString() : value.toISOString();
+
 const sortAssetTotals = (totals: Array<{ asset: string; amount: number }>) =>
   totals.sort((left, right) => left.asset.localeCompare(right.asset, "en"));
 
@@ -72,7 +94,7 @@ export async function buildFinanceAssistantContext(
   db: AssistantDb,
   input: { ownerId: string; todayIso: string; timezone: string }
 ): Promise<FinanceAssistantContext> {
-  const [storagePlaces, debts, pendingDraftCount] = await Promise.all([
+  const [storagePlaces, debts, pendingDraftCount, memories, recentMessages] = await Promise.all([
     db.storagePlace.findMany({
       where: { ownerId: input.ownerId, status: { not: "closed" } },
       select: {
@@ -106,6 +128,18 @@ export async function buildFinanceAssistantContext(
     }),
     db.aiDraft.count({
       where: { ownerId: input.ownerId, status: { in: ["pending", "needs_clarification"] } }
+    }),
+    db.assistantMemory.findMany({
+      where: { ownerId: input.ownerId, status: "active" },
+      select: { kind: true, text: true },
+      orderBy: { updatedAt: "desc" },
+      take: 30
+    }),
+    db.assistantMessage.findMany({
+      where: { ownerId: input.ownerId },
+      select: { role: true, source: true, text: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 12
     })
   ]);
 
@@ -131,6 +165,16 @@ export async function buildFinanceAssistantContext(
   return {
     todayIso: input.todayIso,
     timezone: input.timezone,
+    memories: memories.map((memory) => ({
+      kind: memory.kind,
+      text: memory.text
+    })),
+    recentMessages: [...recentMessages].reverse().map((message) => ({
+      role: message.role,
+      source: message.source,
+      text: message.text,
+      createdAt: toIsoDateTime(message.createdAt)
+    })),
     assetTotals: sortAssetTotals(
       [...assetAmountByCode.entries()].map(([asset, amount]) => ({ asset, amount }))
     ),
@@ -174,8 +218,21 @@ export async function answerTelegramAssistantMessage(input: {
     process.env.OPENAI_ASSISTANT_MODEL ?? process.env.OPENAI_PARSE_MODEL ?? DEFAULT_ASSISTANT_MODEL
   );
 
-  return responder.answerMessage({
+  const answer = await responder.answerMessage({
     text: input.text,
     context
   });
+
+  try {
+    await rememberAssistantExchange(prisma, {
+      ownerId: owner.id,
+      source: input.source,
+      userText: input.text,
+      assistantText: answer.text
+    });
+  } catch (error) {
+    console.warn("Assistant memory write failed:", error);
+  }
+
+  return answer;
 }
