@@ -4,6 +4,9 @@ import type { OpenAiTranscriptionClient } from "@/server/ai/transcription";
 import { processTelegramUpdate, TelegramUpdateSchema } from "@/server/telegram/update";
 
 const DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
+const TELEGRAM_TYPING_HEARTBEAT_MS = 4000;
+const TELEGRAM_PROGRESSIVE_MESSAGE_LIMIT = 900;
+
 type DraftMutationRouteHandler = (
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -16,7 +19,7 @@ const getRouteDependencies = async () => {
     { answerTelegramAssistantMessage },
     { createDraftFromCorrectedMessage },
     { transcribeAudioFile },
-    { answerTelegramCallbackQuery, sendTelegramMessage },
+    { answerTelegramCallbackQuery, sendTelegramChatAction, sendTelegramMessage },
     { downloadTelegramVoiceFile },
     {
       clearTelegramConversationState,
@@ -48,6 +51,7 @@ const getRouteDependencies = async () => {
     getOpenAiClient,
     transcribeAudioFile,
     answerTelegramCallbackQuery,
+    sendTelegramChatAction,
     sendTelegramMessage,
     downloadTelegramVoiceFile,
     clearTelegramConversationState,
@@ -109,6 +113,144 @@ const getUpdateChatId = (update: z.infer<typeof TelegramUpdateSchema>) => {
 
 const getUpdateCallbackQueryId = (update: z.infer<typeof TelegramUpdateSchema>) =>
   update.callback_query?.id ?? null;
+
+const getUpdateMessageChatId = (update: z.infer<typeof TelegramUpdateSchema>) => {
+  const chatId = update.message?.chat.id;
+
+  return typeof chatId === "number" ? chatId : null;
+};
+
+const getUpdateMessageTelegramUserId = (update: z.infer<typeof TelegramUpdateSchema>) => {
+  const telegramUserId = update.message?.from.id;
+
+  return typeof telegramUserId === "number" ? String(telegramUserId) : null;
+};
+
+const shouldShowTypingForUpdate = (
+  update: z.infer<typeof TelegramUpdateSchema>,
+  allowedUserId?: string
+) => {
+  const telegramUserId = getUpdateMessageTelegramUserId(update);
+
+  return telegramUserId !== null && (!allowedUserId || telegramUserId === allowedUserId);
+};
+
+const callAndLog = (operation: () => Promise<unknown>, label: string) => {
+  Promise.resolve()
+    .then(operation)
+    .catch((error) => console.warn(label, error));
+};
+
+const unrefTimer = (timer: ReturnType<typeof setInterval>) => {
+  if (typeof timer === "object" && timer !== null && "unref" in timer) {
+    (timer as { unref: () => void }).unref();
+  }
+};
+
+function startTelegramTypingHeartbeat(input: {
+  update: z.infer<typeof TelegramUpdateSchema>;
+  fetcher: typeof fetch;
+  botToken: string;
+  allowedUserId?: string;
+  sendTelegramChatAction: Awaited<
+    ReturnType<typeof getRouteDependencies>
+  >["sendTelegramChatAction"];
+}) {
+  if (!shouldShowTypingForUpdate(input.update, input.allowedUserId)) {
+    return () => undefined;
+  }
+
+  const chatId = getUpdateMessageChatId(input.update);
+  if (chatId === null) {
+    return () => undefined;
+  }
+
+  let active = true;
+  const sendTyping = () => {
+    if (!active) {
+      return;
+    }
+
+    callAndLog(
+      () =>
+        input.sendTelegramChatAction({
+          fetcher: input.fetcher,
+          botToken: input.botToken,
+          chatId,
+          action: "typing"
+        }),
+      "Telegram typing heartbeat failed:"
+    );
+  };
+
+  sendTyping();
+  const timer = setInterval(sendTyping, TELEGRAM_TYPING_HEARTBEAT_MS);
+  unrefTimer(timer);
+
+  return () => {
+    active = false;
+    clearInterval(timer);
+  };
+}
+
+const findTelegramChunkBreak = (text: string, limit: number) => {
+  const preferredBreaks = ["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " "];
+  const minimumBreak = Math.floor(limit * 0.45);
+
+  for (const marker of preferredBreaks) {
+    const index = text.lastIndexOf(marker, limit);
+    if (index >= minimumBreak) {
+      return index + marker.length;
+    }
+  }
+
+  return limit;
+};
+
+const splitTelegramMessageText = (
+  text: string,
+  limit = TELEGRAM_PROGRESSIVE_MESSAGE_LIMIT
+) => {
+  if (text.length <= limit) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let remaining = text.trim();
+
+  while (remaining.length > limit) {
+    const splitAt = findTelegramChunkBreak(remaining, limit);
+    const chunk = remaining.slice(0, splitAt).trim();
+    if (chunk.length > 0) {
+      chunks.push(chunk);
+    }
+    remaining = remaining.slice(splitAt).trim();
+  }
+
+  if (remaining.length > 0) {
+    chunks.push(remaining);
+  }
+
+  return chunks;
+};
+
+async function sendTelegramMessageProgressively(
+  input: Parameters<Awaited<ReturnType<typeof getRouteDependencies>>["sendTelegramMessage"]>[0],
+  sendTelegramMessage: Awaited<ReturnType<typeof getRouteDependencies>>["sendTelegramMessage"]
+) {
+  if (input.buttons.length > 0 || input.text.length <= TELEGRAM_PROGRESSIVE_MESSAGE_LIMIT) {
+    await sendTelegramMessage(input);
+    return;
+  }
+
+  for (const chunk of splitTelegramMessageText(input.text)) {
+    await sendTelegramMessage({
+      ...input,
+      text: chunk,
+      buttons: []
+    });
+  }
+}
 
 async function notifyTelegramProcessingFailure(input: {
   update: z.infer<typeof TelegramUpdateSchema>;
@@ -186,6 +328,7 @@ export async function POST(request: Request) {
     getTelegramConversationState,
     getOpenAiClient,
     rejectAiDraftRoute,
+    sendTelegramChatAction,
     sendTelegramMessage,
     setTelegramConversationState,
     prisma,
@@ -194,9 +337,16 @@ export async function POST(request: Request) {
   let result: unknown;
   let userVisibleTelegramSendAttempted = false;
   let callbackAnswerAttempted = false;
+  const stopTypingHeartbeat = startTelegramTypingHeartbeat({
+    update,
+    fetcher: fetch,
+    botToken,
+    allowedUserId: process.env.TELEGRAM_ALLOWED_USER_ID,
+    sendTelegramChatAction
+  });
   const sendUserVisibleTelegramMessage: typeof sendTelegramMessage = async (input) => {
     userVisibleTelegramSendAttempted = true;
-    await sendTelegramMessage(input);
+    await sendTelegramMessageProgressively(input, sendTelegramMessage);
   };
   const answerUserVisibleTelegramCallback: typeof answerTelegramCallbackQuery = async (input) => {
     callbackAnswerAttempted = true;
@@ -240,6 +390,8 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ ok: false, error: "Telegram update processing failed" });
+  } finally {
+    stopTypingHeartbeat();
   }
 
   return NextResponse.json(result);

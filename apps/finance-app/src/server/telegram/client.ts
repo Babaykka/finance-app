@@ -100,6 +100,30 @@ export async function answerTelegramCallbackQuery(input: {
   });
 }
 
+export async function sendTelegramChatAction(input: {
+  fetcher: Fetcher;
+  botToken: string;
+  chatId: number;
+  action: "typing";
+  messageThreadId?: number;
+  directMessagesTopicId?: number;
+}) {
+  const body: Record<string, unknown> = {
+    chat_id: input.chatId,
+    action: input.action
+  };
+
+  if (input.messageThreadId !== undefined) {
+    body.message_thread_id = input.messageThreadId;
+  }
+
+  if (input.directMessagesTopicId !== undefined) {
+    body.direct_messages_topic_id = input.directMessagesTopicId;
+  }
+
+  await postTelegramApi(input.fetcher, input.botToken, "sendChatAction", body);
+}
+
 export async function deleteTelegramWebhook(input: {
   fetcher: Fetcher;
   botToken: string;

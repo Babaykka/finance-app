@@ -3,6 +3,7 @@ import {
   answerTelegramCallbackQuery,
   deleteTelegramWebhook,
   getTelegramUpdates,
+  sendTelegramChatAction,
   sendTelegramMessage,
   setTelegramChatMenuButton,
   setTelegramCommands,
@@ -139,6 +140,30 @@ describe("sendTelegramMessage", () => {
 });
 
 describe("Telegram Bot API helpers", () => {
+  it("sends typing chat actions", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({ ok: true, result: true })
+    });
+
+    await sendTelegramChatAction({
+      fetcher,
+      botToken: "token",
+      chatId: 123,
+      action: "typing"
+    });
+
+    expect(fetcher).toHaveBeenCalledWith("https://api.telegram.org/bottoken/sendChatAction", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: 123,
+        action: "typing"
+      })
+    });
+  });
+
   it("answers callback queries", async () => {
     const fetcher = vi.fn().mockResolvedValue({
       ok: true,

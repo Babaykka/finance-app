@@ -3,6 +3,7 @@ import { POST } from "@/app/api/telegram/webhook/route";
 
 const mocks = vi.hoisted(() => {
   const sendTelegramMessage = vi.fn();
+  const sendTelegramChatAction = vi.fn();
   const answerTelegramCallbackQuery = vi.fn();
   const createDraftFromParsedMessage = vi.fn();
   const createDraftFromParseResult = vi.fn();
@@ -21,6 +22,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     sendTelegramMessage,
+    sendTelegramChatAction,
     answerTelegramCallbackQuery,
     createDraftFromParsedMessage,
     createDraftFromParseResult,
@@ -45,6 +47,7 @@ vi.mock("@/server/db", () => ({
 
 vi.mock("@/server/telegram/client", () => ({
   answerTelegramCallbackQuery: mocks.answerTelegramCallbackQuery,
+  sendTelegramChatAction: mocks.sendTelegramChatAction,
   sendTelegramMessage: mocks.sendTelegramMessage
 }));
 
@@ -96,6 +99,7 @@ const telegramWebhookRequest = (body: unknown, secret = "secret") =>
 
 const expectNoDownstreamCalls = (fetcher: ReturnType<typeof vi.fn>) => {
   expect(fetcher).not.toHaveBeenCalled();
+  expect(mocks.sendTelegramChatAction).not.toHaveBeenCalled();
   expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
   expect(mocks.answerTelegramCallbackQuery).not.toHaveBeenCalled();
   expect(mocks.createDraftFromParsedMessage).not.toHaveBeenCalled();
@@ -186,6 +190,33 @@ describe("telegram webhook route", () => {
       ]
     });
     await expect(response.json()).resolves.toEqual({ ok: true, handled: "text" });
+  });
+
+  it("shows typing while processing allowed Telegram messages", async () => {
+    const draft = {
+      id: "draft-typing",
+      parsedActions: { summary: "Создать долг." }
+    };
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    mocks.createDraftFromParsedMessage.mockResolvedValue(draft);
+
+    await POST(
+      telegramWebhookRequest({
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "Геворг должен 50000"
+        }
+      })
+    );
+
+    expect(mocks.sendTelegramChatAction).toHaveBeenCalledWith({
+      fetcher,
+      botToken: "token",
+      chatId: 456,
+      action: "typing"
+    });
   });
 
   it("handles direct storage rename commands without calling the AI parser", async () => {
@@ -406,6 +437,43 @@ describe("telegram webhook route", () => {
       botToken: "token",
       chatId: 456,
       text: "У тебя сейчас 1 928 187 RUB в местах хранения.",
+      buttons: []
+    });
+    await expect(response.json()).resolves.toEqual({ ok: true, handled: "assistant_reply" });
+  });
+
+  it("sends long assistant replies as several readable Telegram messages", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const firstPart = "Первый блок ответа. ".repeat(45).trim();
+    const secondPart = "Второй блок ответа. ".repeat(45).trim();
+    mocks.answerTelegramAssistantMessage.mockResolvedValue({
+      text: `${firstPart}\n\n${secondPart}`
+    });
+
+    const response = await POST(
+      telegramWebhookRequest({
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "Расскажи подробно по финансам"
+        }
+      })
+    );
+
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.sendTelegramMessage).toHaveBeenNthCalledWith(1, {
+      fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: firstPart,
+      buttons: []
+    });
+    expect(mocks.sendTelegramMessage).toHaveBeenNthCalledWith(2, {
+      fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: secondPart,
       buttons: []
     });
     await expect(response.json()).resolves.toEqual({ ok: true, handled: "assistant_reply" });
