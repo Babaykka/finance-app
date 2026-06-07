@@ -158,7 +158,7 @@ describe("parse-message route request schema", () => {
       new Request("http://localhost/api/parse-message", {
         method: "POST",
         body: JSON.stringify({
-          text: "Геворг вернул 10000 рублей",
+          text: "Геворг вернул часть долга, сумму не написал",
           source: "web_form"
         })
       })
@@ -187,7 +187,7 @@ describe("parse-message route request schema", () => {
     expect(mocks.getOpenAiClient).toHaveBeenCalledOnce();
     expect(mocks.createOpenAiParser).toHaveBeenCalledWith(mocks.openAiClient, "gpt-route-test");
     expect(mocks.parseMessage).toHaveBeenCalledWith({
-      text: "Геворг вернул 10000 рублей",
+      text: "Геворг вернул часть долга, сумму не написал",
       context: {
         todayIso: "2026-06-04",
         timezone: "Europe/Moscow",
@@ -212,7 +212,7 @@ describe("parse-message route request schema", () => {
     expect(mocks.createAiDraft).toHaveBeenCalledWith(mocks.prisma, {
       ownerId: "owner-1",
       source: "web",
-      rawText: "Геворг вернул 10000 рублей",
+      rawText: "Геворг вернул часть долга, сумму не написал",
       transcript: undefined,
       parseResult
     });
@@ -239,13 +239,70 @@ describe("parse-message route request schema", () => {
       new Request("http://localhost/api/parse-message", {
         method: "POST",
         body: JSON.stringify({
-          text: "Геворг должен 50000 рублей",
+          text: "Геворг должен вернуть деньги, но сумму я уточню позже",
           source: "telegram_text"
         })
       })
     );
 
     expect(mocks.createOpenAiParser).toHaveBeenCalledWith(mocks.openAiClient, "gpt-5.2");
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual(draft);
+  });
+
+  it("uses the local parser for clear storage updates without calling OpenAI", async () => {
+    const draft = {
+      id: "draft-local-storage",
+      status: "pending",
+      parsedActions: {
+        confidence: 0.93,
+        summary: "Обновить место хранения: ВТБ счет, 280000 RUB под 0%.",
+        actions: [
+          {
+            type: "update_storage_place",
+            storagePlaceId: "storage-vtb",
+            currentName: "ВТБ счет",
+            amount: 280000,
+            asset: "RUB",
+            amountKind: "exact",
+            rate: 0
+          }
+        ],
+        needsClarification: []
+      }
+    };
+    mocks.getLocalOwner.mockResolvedValue({ id: "owner-1", telegramUserId: "123" });
+    mocks.debtFindMany.mockResolvedValue([]);
+    mocks.storagePlaceFindMany.mockResolvedValue([
+      {
+        id: "storage-vtb",
+        name: "ВТБ счет",
+        asset: "RUB",
+        amount: { toString: () => "268187" }
+      }
+    ]);
+    mocks.createAiDraft.mockResolvedValue(draft);
+
+    const response = await POST(
+      new Request("http://localhost/api/parse-message", {
+        method: "POST",
+        body: JSON.stringify({
+          text: "можешь добавить что у меня 280k руб в втб под 0%",
+          source: "telegram_text"
+        })
+      })
+    );
+
+    expect(mocks.getOpenAiClient).not.toHaveBeenCalled();
+    expect(mocks.createOpenAiParser).not.toHaveBeenCalled();
+    expect(mocks.parseMessage).not.toHaveBeenCalled();
+    expect(mocks.createAiDraft).toHaveBeenCalledWith(mocks.prisma, {
+      ownerId: "owner-1",
+      source: "telegram_text",
+      rawText: "можешь добавить что у меня 280k руб в втб под 0%",
+      transcript: undefined,
+      parseResult: draft.parsedActions
+    });
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(draft);
   });

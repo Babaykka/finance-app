@@ -3,6 +3,7 @@ import { dateToMoscowDateIso, MOSCOW_TIMEZONE } from "@/domain/dates";
 import type { Source } from "@/domain/enums";
 import type { AiParserContext } from "@/server/ai/parser";
 import { createOpenAiParser, getOpenAiClient } from "@/server/ai/openai-adapter";
+import { parseLocalFinanceMessage } from "@/server/ai/local-parser";
 import { prisma } from "@/server/db";
 import { getLocalOwner } from "@/server/auth/local-owner";
 import { createAiDraft } from "@/server/services/draft-service";
@@ -89,14 +90,19 @@ export async function createDraftFromParsedMessage(rawInput: unknown) {
       amount: toFiniteNumber(place.amount, place.name)
     }))
   };
-  const parser = createOpenAiParser(
-    getOpenAiClient(),
-    process.env.OPENAI_PARSE_MODEL ?? DEFAULT_PARSE_MODEL
-  );
-  const parseResult = await parser.parseMessage({
+  const localParseResult = parseLocalFinanceMessage({
     text: body.text,
     context
   });
+  const parseResult =
+    localParseResult ??
+    (await createOpenAiParser(
+      getOpenAiClient(),
+      process.env.OPENAI_PARSE_MODEL ?? DEFAULT_PARSE_MODEL
+    ).parseMessage({
+      text: body.text,
+      context
+    }));
 
   return createAiDraft(prisma, {
     ownerId: owner.id,
