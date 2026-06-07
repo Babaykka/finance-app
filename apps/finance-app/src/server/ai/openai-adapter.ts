@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { getOpenAiApiKey } from "./api-key";
-import { parseAiJson, type AiParser } from "./parser";
+import { parseAiJson, type AiParser, type AiParserContext } from "./parser";
 
 const SYSTEM_PROMPT = [
   "Ты финансовый парсер для личного учета.",
@@ -110,6 +110,11 @@ const normalizeIntentText = (value: string) =>
     .toLocaleLowerCase("ru-RU")
     .replaceAll("ё", "е")
     .replace(/\s+/g, " ")
+    .trim();
+
+const normalizeLookupText = (value: string) =>
+  normalizeIntentText(value)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
 const hasExplicitDebtIntent = (text: string) =>
@@ -455,16 +460,116 @@ const buildTrustedPersonStorageSummary = (action: Record<string, unknown>) => {
   return `Добавить место хранения: ${name}, ${amount} ${asset}.`;
 };
 
-function normalizeLooseParserJson(json: unknown, todayIso: string, rawText: string): unknown {
+const matchesKnownDebtParty = (knownPartyName: string, actionPartyName: string) => {
+  const known = normalizeLookupText(knownPartyName);
+  const action = normalizeLookupText(actionPartyName);
+
+  return known === action || known.includes(action) || action.includes(known);
+};
+
+const formatMoney = (amount: unknown, asset: unknown) =>
+  `${typeof amount === "number" ? amount : Number(amount)} ${typeof asset === "string" ? asset : "актив"}`;
+
+const buildPaymentClarification = (
+  action: Record<string, unknown>,
+  matches: AiParserContext["knownDebts"]
+) => {
+  const partyName = firstNonEmptyString(action.partyName) ?? "этому человеку";
+  const asset = isOneOf(action.asset, VALID_ASSETS) ? action.asset : "RUB";
+  const amount = Number(action.amount);
+
+  if (matches.length === 0) {
+    return `Не нашел открытый долг для «${partyName}» в ${asset}. Укажи, к какому долгу относится оплата ${formatMoney(amount, asset)}.`;
+  }
+
+  return `По имени «${partyName}» найдено несколько долгов в ${asset}. Укажи, к какому долгу относится оплата ${formatMoney(amount, asset)}.`;
+};
+
+const normalizeRecordDebtPaymentAction = (
+  action: Record<string, unknown>,
+  context: AiParserContext,
+  todayIso: string,
+  rawText: string,
+  assignedDebtIds: Set<string>
+): { action?: Record<string, unknown>; clarification?: string } => {
+  const paymentDate = action.paymentDate ?? action.paidAt ?? action.date ?? todayIso;
+  const normalizedAction: Record<string, unknown> = {
+    ...action,
+    asset: inferAsset(action, rawText),
+    paymentDate
+  };
+
+  if (typeof normalizedAction.debtId === "string" && normalizedAction.debtId.trim().length > 0) {
+    return { action: normalizedAction };
+  }
+
+  const partyName = firstNonEmptyString(normalizedAction.partyName);
+  if (!partyName) {
+    return {
+      clarification: "Укажи, к какому долгу относится оплата."
+    };
+  }
+
+  const asset = isOneOf(normalizedAction.asset, VALID_ASSETS) ? normalizedAction.asset : "RUB";
+  const matchingDebts = context.knownDebts.filter(
+    (debt) =>
+      debt.asset === asset &&
+      !assignedDebtIds.has(debt.id) &&
+      matchesKnownDebtParty(debt.partyName, partyName)
+  );
+  const amount = Number(normalizedAction.amount);
+  const exactAmountDebts = Number.isFinite(amount)
+    ? matchingDebts.filter((debt) => debt.remainingAmount === amount)
+    : [];
+  const payableDebts = Number.isFinite(amount)
+    ? matchingDebts.filter((debt) => amount <= debt.remainingAmount)
+    : matchingDebts;
+  const selectedDebt =
+    exactAmountDebts.length === 1
+      ? exactAmountDebts[0]
+      : payableDebts.length === 1
+        ? payableDebts[0]
+        : undefined;
+
+  if (selectedDebt) {
+    assignedDebtIds.add(selectedDebt.id);
+
+    return {
+      action: {
+        ...normalizedAction,
+        partyName,
+        debtId: selectedDebt.id
+      }
+    };
+  }
+
+  if (matchingDebts.length === 1 && matchingDebts[0] && Number.isFinite(amount)) {
+    return {
+      clarification: `Оплата ${formatMoney(amount, asset)} больше остатка долга «${matchingDebts[0].partyName}» (${matchingDebts[0].remainingAmount} ${asset}). Уточни сумму или долг.`
+    };
+  }
+
+  return {
+    clarification: buildPaymentClarification(normalizedAction, matchingDebts)
+  };
+};
+
+function normalizeLooseParserJson(
+  json: unknown,
+  context: AiParserContext,
+  rawText: string
+): unknown {
   if (!isRecord(json)) {
     return json;
   }
 
   let firstTrustedPersonStorageAction: Record<string, unknown> | null = null;
+  const generatedClarifications: string[] = [];
+  const assignedDebtIds = new Set<string>();
   const actions = Array.isArray(json.actions)
-    ? json.actions.map((action) => {
+    ? json.actions.flatMap((action) => {
         if (!isRecord(action)) {
-          return action;
+          return [action];
         }
 
         if (shouldTreatAsTrustedPersonStorage(rawText, action)) {
@@ -472,34 +577,48 @@ function normalizeLooseParserJson(json: unknown, todayIso: string, rawText: stri
           if (isRecord(storageAction) && storageAction.type === "create_storage_place") {
             firstTrustedPersonStorageAction ??= storageAction;
           }
-          return storageAction;
+          return [storageAction];
         }
 
         if (action.type === "create_storage_place") {
-          return normalizeCreateStorageAction(action, rawText);
+          return [normalizeCreateStorageAction(action, rawText)];
         }
 
         if (
           action.type === "update_storage_place" ||
           action.type === "rename_storage_place"
         ) {
-          return normalizeUpdateStorageAction(action);
+          return [normalizeUpdateStorageAction(action)];
         }
 
         if (action.type === "create_debt") {
-          return normalizeCreateDebtAction(action);
+          return [normalizeCreateDebtAction(action)];
         }
 
         if (action.type !== "record_debt_payment") {
-          return action;
+          return [action];
         }
 
-        return {
-          ...action,
-          paymentDate: action.paymentDate ?? action.paidAt ?? action.date ?? todayIso
-        };
+        const normalizedPayment = normalizeRecordDebtPaymentAction(
+          action,
+          context,
+          context.todayIso,
+          rawText,
+          assignedDebtIds
+        );
+        if (normalizedPayment.clarification) {
+          generatedClarifications.push(normalizedPayment.clarification);
+        }
+
+        return normalizedPayment.action ? [normalizedPayment.action] : [];
       })
     : json.actions;
+  const existingClarifications = Array.isArray(json.needsClarification)
+    ? json.needsClarification.filter(
+        (clarification): clarification is string =>
+          typeof clarification === "string" && clarification.trim().length > 0
+      )
+    : [];
 
   return {
     confidence: json.confidence ?? 0.7,
@@ -508,7 +627,7 @@ function normalizeLooseParserJson(json: unknown, todayIso: string, rawText: stri
         ? buildTrustedPersonStorageSummary(firstTrustedPersonStorageAction)
         : (json.summary ?? "AI создал черновик финансового действия."),
     actions,
-    needsClarification: json.needsClarification ?? []
+    needsClarification: [...existingClarifications, ...generatedClarifications]
   };
 }
 
@@ -541,7 +660,7 @@ export function createOpenAiParser(client: OpenAiParserClient, model: string): A
         throw new Error("OpenAI parser response must be valid JSON", { cause: error });
       }
 
-      return parseAiJson(normalizeLooseParserJson(parsedJson, input.context.todayIso, input.text));
+      return parseAiJson(normalizeLooseParserJson(parsedJson, input.context, input.text));
     }
   };
 }

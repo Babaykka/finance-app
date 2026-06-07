@@ -94,7 +94,8 @@ type CreateStorageTransactionDb = {
 };
 
 type UpdateStorageTransactionDb = {
-  storagePlace: Pick<PrismaClient["storagePlace"], "findFirstOrThrow" | "update">;
+  storagePlace: Pick<PrismaClient["storagePlace"], "findFirstOrThrow" | "update"> &
+    Partial<Pick<PrismaClient["storagePlace"], "findMany">>;
   auditLog: Pick<PrismaClient["auditLog"], "create">;
 };
 
@@ -146,6 +147,67 @@ const pickAuditValues = (
 ): Record<string, unknown> =>
   Object.fromEntries(fields.map((field) => [field, toAuditCompatibleValue(record[field])]));
 
+const normalizeStorageLookupName = (value: string) => {
+  const words = value
+    .toLocaleLowerCase("ru-RU")
+    .replaceAll("ё", "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean)
+    .map((word) =>
+      word === "нал" || word === "cash" || word === "кэш" || word === "наличка"
+        ? "наличные"
+        : word
+    );
+
+  return words.filter((word, index) => index === 0 || word !== words[index - 1]).join(" ");
+};
+
+type StoragePlaceRecord = Awaited<
+  ReturnType<UpdateStorageTransactionDb["storagePlace"]["findFirstOrThrow"]>
+>;
+
+const findStoragePlaceForUpdate = async (
+  tx: UpdateStorageTransactionDb,
+  input: z.infer<typeof UpdateStoragePlaceSchema>,
+  storagePlaceId: string | undefined,
+  currentName: string | undefined
+): Promise<StoragePlaceRecord> => {
+  try {
+    return await tx.storagePlace.findFirstOrThrow({
+      where:
+        storagePlaceId !== undefined
+          ? {
+              ownerId: input.ownerId,
+              id: storagePlaceId
+            }
+          : {
+              ownerId: input.ownerId,
+              name: currentName
+            }
+    });
+  } catch (error) {
+    if (storagePlaceId !== undefined || currentName === undefined || !tx.storagePlace.findMany) {
+      throw error;
+    }
+
+    const normalizedCurrentName = normalizeStorageLookupName(currentName);
+    const candidates = await tx.storagePlace.findMany({
+      where: { ownerId: input.ownerId }
+    });
+    const matches = candidates.filter(
+      (candidate) => normalizeStorageLookupName(candidate.name) === normalizedCurrentName
+    );
+
+    if (matches.length === 1 && matches[0]) {
+      return matches[0] as StoragePlaceRecord;
+    }
+
+    throw error;
+  }
+};
+
 export async function createStoragePlace(
   db: StorageDb<CreateStorageTransactionDb>,
   rawInput: unknown
@@ -182,18 +244,7 @@ export async function updateStoragePlace(
   const updateData: Prisma.StoragePlaceUncheckedUpdateInput = data;
 
   return runInStorageTransaction(db, async (tx) => {
-    const current = await tx.storagePlace.findFirstOrThrow({
-      where:
-        storagePlaceId !== undefined
-          ? {
-              ownerId: input.ownerId,
-              id: storagePlaceId
-            }
-          : {
-              ownerId: input.ownerId,
-              name: currentName
-            }
-    });
+    const current = await findStoragePlaceForUpdate(tx, input, storagePlaceId, currentName);
 
     const updated = await tx.storagePlace.update({
       where: { id: current.id },

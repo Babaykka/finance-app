@@ -111,6 +111,7 @@ describe("OpenAI parser adapter", () => {
         {
           type: "record_debt_payment",
           partyName: "Геворг",
+          debtId: "debt-1",
           amount: 10000,
           asset: "RUB",
           paymentDate: "2026-06-03",
@@ -144,7 +145,14 @@ describe("OpenAI parser adapter", () => {
       context: {
         todayIso: "2026-06-03",
         timezone: "Europe/Moscow",
-        knownDebts: [],
+        knownDebts: [
+          {
+            id: "debt-1",
+            partyName: "Геворг",
+            remainingAmount: 50000,
+            asset: "RUB"
+          }
+        ],
         knownStoragePlaces: []
       }
     });
@@ -152,10 +160,176 @@ describe("OpenAI parser adapter", () => {
     expect(result.actions[0]).toEqual({
       type: "record_debt_payment",
       partyName: "Геворг",
+      debtId: "debt-1",
       amount: 10000,
       asset: "RUB",
       paymentDate: "2026-06-03"
     });
+  });
+
+  it("attaches debtId to a payment when exactly one known debt matches the party", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.86,
+        summary: "Записать оплату долга Степана.",
+        actions: [
+          {
+            type: "record_debt_payment",
+            partyName: "Степан Гаврилюк",
+            amount: 25000,
+            asset: "RUB",
+            paymentDate: "2026-06-07"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "Степан Гаврилюк оплатил 25000 рублей",
+      context: {
+        todayIso: "2026-06-07",
+        timezone: "Europe/Moscow",
+        knownDebts: [
+          {
+            id: "debt-stepan",
+            partyName: "Степан Гаврилюк",
+            remainingAmount: 25000,
+            asset: "RUB"
+          }
+        ],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions[0]).toEqual({
+      type: "record_debt_payment",
+      partyName: "Степан Гаврилюк",
+      debtId: "debt-stepan",
+      amount: 25000,
+      asset: "RUB",
+      paymentDate: "2026-06-07"
+    });
+    expect(result.needsClarification).toEqual([]);
+  });
+
+  it("requires clarification for a payment when several known debts match the party", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.82,
+        summary: "Записать оплату Вероники.",
+        actions: [
+          {
+            type: "record_debt_payment",
+            partyName: "Вероника",
+            amount: 18000,
+            asset: "RUB",
+            paymentDate: "2026-06-07"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "Вероника оплатила 5000 рублей и 13000 рублей",
+      context: {
+        todayIso: "2026-06-07",
+        timezone: "Europe/Moscow",
+        knownDebts: [
+          {
+            id: "debt-veronika-1",
+            partyName: "Вероника",
+            remainingAmount: 5000,
+            asset: "RUB"
+          },
+          {
+            id: "debt-veronika-2",
+            partyName: "Вероника",
+            remainingAmount: 13000,
+            asset: "RUB"
+          }
+        ],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions).toEqual([]);
+    expect(result.needsClarification).toEqual([
+      "По имени «Вероника» найдено несколько долгов в RUB. Укажи, к какому долгу относится оплата 18000 RUB."
+    ]);
+  });
+
+  it("splits several payments by exact remaining debt amounts for the same party", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.88,
+        summary: "Записать две оплаты Вероники.",
+        actions: [
+          {
+            type: "record_debt_payment",
+            partyName: "Вероника",
+            amount: 5000,
+            asset: "RUB",
+            paymentDate: "2026-06-07"
+          },
+          {
+            type: "record_debt_payment",
+            partyName: "Вероника",
+            amount: 13000,
+            asset: "RUB",
+            paymentDate: "2026-06-07"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "Вероника оплатила долг 5000 рублей и 13000 рублей",
+      context: {
+        todayIso: "2026-06-07",
+        timezone: "Europe/Moscow",
+        knownDebts: [
+          {
+            id: "debt-veronika-1",
+            partyName: "Вероника",
+            remainingAmount: 5000,
+            asset: "RUB"
+          },
+          {
+            id: "debt-veronika-2",
+            partyName: "Вероника",
+            remainingAmount: 13000,
+            asset: "RUB"
+          }
+        ],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions).toEqual([
+      {
+        type: "record_debt_payment",
+        partyName: "Вероника",
+        debtId: "debt-veronika-1",
+        amount: 5000,
+        asset: "RUB",
+        paymentDate: "2026-06-07"
+      },
+      {
+        type: "record_debt_payment",
+        partyName: "Вероника",
+        debtId: "debt-veronika-2",
+        amount: 13000,
+        asset: "RUB",
+        paymentDate: "2026-06-07"
+      }
+    ]);
+    expect(result.needsClarification).toEqual([]);
   });
 
   it("normalizes loose debt creation responses into the required draft schema", async () => {
