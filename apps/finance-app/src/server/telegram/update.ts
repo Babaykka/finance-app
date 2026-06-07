@@ -250,8 +250,16 @@ const hasQuestionIntent = (text: string) => {
   );
 };
 
+const hasStorageRenameIntent = (text: string) =>
+  /(?:переимен|поменяй\s+назван|измени\s+назван|назови)\S*/u.test(text) &&
+  /\s+(?:в|на)\s+/u.test(text);
+
 const shouldCreateDraftFromText = (text: string) => {
   const normalized = normalizeIntentText(text);
+
+  if (hasStorageRenameIntent(normalized)) {
+    return true;
+  }
 
   if (hasQuestionIntent(normalized)) {
     return false;

@@ -1,15 +1,27 @@
+import type { PrismaClient } from "@prisma/client";
 import type { Source } from "@/domain/enums";
 import type { AiAction } from "@/server/ai/schema";
 import {
   createDebtWithOptionalPlan,
   recordDebtPayment
 } from "@/server/services/debt-service";
-import { createStoragePlace } from "@/server/services/storage-service";
+import {
+  createStoragePlace,
+  updateStoragePlace
+} from "@/server/services/storage-service";
 
 type StorageServiceDb = Parameters<typeof createStoragePlace>[0];
+type StorageUpdateServiceDb = Parameters<typeof updateStoragePlace>[0];
 type DebtServiceDb = Parameters<typeof createDebtWithOptionalPlan>[0];
 
-export type ActionApplicationDb = Partial<StorageServiceDb> & Partial<DebtServiceDb>;
+export type ActionApplicationDb = {
+  storagePlace?: Partial<
+    Pick<PrismaClient["storagePlace"], "create" | "findFirstOrThrow" | "update">
+  >;
+  debt?: Partial<Pick<PrismaClient["debt"], "create" | "findFirstOrThrow" | "update">>;
+  debtPayment?: Partial<Pick<PrismaClient["debtPayment"], "create">>;
+  auditLog?: Partial<Pick<PrismaClient["auditLog"], "create">>;
+};
 type TransactionCapableActionApplicationDb = ActionApplicationDb & {
   $transaction?<T>(fn: (tx: ActionApplicationDb) => Promise<T>): Promise<T>;
 };
@@ -23,6 +35,7 @@ export type ApplyAiActionsInput = {
 
 export type AppliedAiActionResult =
   | Awaited<ReturnType<typeof createStoragePlace>>
+  | Awaited<ReturnType<typeof updateStoragePlace>>
   | Awaited<ReturnType<typeof createDebtWithOptionalPlan>>
   | Awaited<ReturnType<typeof recordDebtPayment>>;
 
@@ -49,6 +62,16 @@ const requireStorageDb = (db: ActionApplicationDb): StorageServiceDb => {
   }
 
   return db as StorageServiceDb;
+};
+
+const requireStorageUpdateDb = (db: ActionApplicationDb): StorageUpdateServiceDb => {
+  if (!db.storagePlace || !("findFirstOrThrow" in db.storagePlace) || !("update" in db.storagePlace) || !db.auditLog) {
+    throw new Error(
+      "Storage update action application requires storagePlace.findFirstOrThrow, storagePlace.update, and auditLog db delegates"
+    );
+  }
+
+  return db as StorageUpdateServiceDb;
 };
 
 const requireDebtDb = (db: ActionApplicationDb): DebtServiceDb => {
@@ -86,6 +109,33 @@ const applyAiAction = (
       status: storageAction.storageType === "trusted_person" ? "check" : "active",
       attentionPriority: storageAction.attentionPriority,
       ...(storageAction.comment !== undefined ? { comment: storageAction.comment } : {})
+    });
+  }
+
+  if (action.type === "update_storage_place") {
+    return updateStoragePlace(requireStorageUpdateDb(db), {
+      ownerId: input.ownerId,
+      actor: input.actor,
+      source: input.source,
+      ...(action.storagePlaceId !== undefined ? { storagePlaceId: action.storagePlaceId } : {}),
+      ...(action.currentName !== undefined ? { currentName: action.currentName } : {}),
+      ...(action.name !== undefined ? { name: action.name } : {}),
+      ...(action.storageType !== undefined ? { type: action.storageType } : {}),
+      ...(action.subtype !== undefined ? { subtype: action.subtype } : {}),
+      ...(action.holderContext !== undefined ? { holderContext: action.holderContext } : {}),
+      ...(action.asset !== undefined ? { asset: action.asset } : {}),
+      ...(action.amount !== undefined ? { amount: action.amount } : {}),
+      ...(action.amountKind !== undefined ? { amountKind: action.amountKind } : {}),
+      ...(action.availability !== undefined ? { availability: action.availability } : {}),
+      ...(action.rate !== undefined ? { rate: action.rate } : {}),
+      ...(action.interestPaymentDay !== undefined
+        ? { interestPaymentDay: action.interestPaymentDay }
+        : {}),
+      ...(action.status !== undefined ? { status: action.status } : {}),
+      ...(action.attentionPriority !== undefined
+        ? { attentionPriority: action.attentionPriority }
+        : {}),
+      ...(action.comment !== undefined ? { comment: action.comment } : {})
     });
   }
 

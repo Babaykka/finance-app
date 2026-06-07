@@ -105,4 +105,55 @@ describe("AiParseResultSchema", () => {
       })
     ).toThrow();
   });
+
+  it("accepts a storage place rename action", () => {
+    const parsed = AiParseResultSchema.parse({
+      confidence: 0.9,
+      summary: "Переименовать Нал cash в Наличные в кошельке.",
+      actions: [
+        {
+          type: "update_storage_place",
+          currentName: "Нал cash",
+          name: "Наличные в кошельке"
+        }
+      ],
+      needsClarification: []
+    });
+
+    expect(parsed.actions[0]).toEqual({
+      type: "update_storage_place",
+      currentName: "Нал cash",
+      name: "Наличные в кошельке"
+    });
+  });
+
+  it("requires a target and at least one changed field for storage updates", () => {
+    expect(() =>
+      AiParseResultSchema.parse({
+        confidence: 0.9,
+        summary: "Переименовать место хранения.",
+        actions: [
+          {
+            type: "update_storage_place",
+            name: "Наличные в кошельке"
+          }
+        ],
+        needsClarification: []
+      })
+    ).toThrow();
+
+    expect(() =>
+      AiParseResultSchema.parse({
+        confidence: 0.9,
+        summary: "Переименовать место хранения.",
+        actions: [
+          {
+            type: "update_storage_place",
+            currentName: "Нал cash"
+          }
+        ],
+        needsClarification: []
+      })
+    ).toThrow();
+  });
 });

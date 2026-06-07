@@ -132,6 +132,83 @@ describe("applyAiActions", () => {
     });
   });
 
+  it("applies storage place rename updates with audit", async () => {
+    const db = {
+      storagePlace: {
+        create: vi.fn(),
+        findFirstOrThrow: vi.fn().mockResolvedValue({
+          id: "storage-cash",
+          ownerId: "owner-1",
+          name: "Нал cash",
+          type: "cash",
+          subtype: "not_applicable",
+          holderContext: "Нал cash",
+          asset: "RUB",
+          amount: 90000,
+          amountKind: "exact",
+          availability: "immediate",
+          rate: null,
+          interestRule: null,
+          interestPaymentDay: null,
+          reviewOrEndDate: null,
+          lastCheckedAt: null,
+          status: "active",
+          attentionPriority: "medium",
+          comment: null
+        }),
+        update: vi.fn().mockResolvedValue({
+          id: "storage-cash",
+          name: "Наличные в кошельке"
+        })
+      },
+      auditLog: {
+        create: vi.fn().mockResolvedValue({ id: "audit-rename" })
+      }
+    };
+
+    const results = await applyAiActions(db, {
+      ownerId: "owner-1",
+      actor: "telegram:123",
+      source: "telegram_text",
+      actions: [
+        {
+          type: "update_storage_place",
+          currentName: "Нал cash",
+          name: "Наличные в кошельке"
+        } as never
+      ]
+    });
+
+    expect(results).toEqual([{ id: "storage-cash", name: "Наличные в кошельке" }]);
+    expect(db.storagePlace.findFirstOrThrow).toHaveBeenCalledWith({
+      where: {
+        ownerId: "owner-1",
+        name: "Нал cash"
+      }
+    });
+    expect(db.storagePlace.update).toHaveBeenCalledWith({
+      where: { id: "storage-cash" },
+      data: {
+        name: "Наличные в кошельке"
+      }
+    });
+    expect(db.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        ownerId: "owner-1",
+        actor: "telegram:123",
+        source: "telegram_text",
+        entityType: "StoragePlace",
+        entityId: "storage-cash",
+        oldValues: expect.objectContaining({
+          name: "Нал cash"
+        }),
+        newValues: {
+          name: "Наличные в кошельке"
+        }
+      })
+    });
+  });
+
   it("maps create_debt due dates to planned payments", async () => {
     const db = {
       debt: {

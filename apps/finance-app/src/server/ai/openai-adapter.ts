@@ -7,7 +7,7 @@ const SYSTEM_PROMPT = [
   "План:",
   "1. Прочитай сообщение пользователя и контекст известных долгов и мест хранения.",
   "2. Верни только JSON без Markdown и пояснений.",
-  "3. Используй только поддержанные action types: create_storage_place, create_debt, record_debt_payment.",
+  "3. Используй только поддержанные action types: create_storage_place, update_storage_place, create_debt, record_debt_payment.",
   "4. Все даты в action должны быть строками формата yyyy-MM-dd, рассчитанными относительно todayIso и timezone.",
   "5. Не выдумывай пустые обязательные поля; если данных не хватает, добавь вопрос в needsClarification.",
   "6. Сохраняй суммы числами, валюты и enum-значения выбирай из переданного доменного смысла.",
@@ -16,6 +16,7 @@ const SYSTEM_PROMPT = [
   "9. Для create_debt всегда заполняй debtType, basis, status и attentionPriority.",
   "10. Если пользователь пишет, что его деньги есть/лежат/хранятся у другого человека, это create_storage_place со storageType trusted_person, а не create_debt.",
   "11. Создавай create_debt только когда явно сказано, что человек должен пользователю, обязан вернуть/оплатить, есть долг, заказ, работа или рассрочка.",
+  "12. Если пользователь просит переименовать или изменить существующее место хранения, используй update_storage_place: currentName или storagePlaceId для старого места, name для нового названия.",
   "Формат ответа:",
   JSON.stringify({
     confidence: 0.9,
@@ -388,6 +389,33 @@ const normalizeCreateStorageAction = (action: Record<string, unknown>, rawText: 
   };
 };
 
+const normalizeUpdateStorageAction = (action: Record<string, unknown>) => {
+  const currentName = firstNonEmptyString(
+    action.currentName,
+    action.oldName,
+    action.fromName,
+    action.sourceName,
+    action.originalName,
+    action.storageName,
+    action.placeName,
+    action.nameBefore
+  );
+  const name = firstNonEmptyString(
+    action.name,
+    action.newName,
+    action.toName,
+    action.targetName,
+    action.nameAfter
+  );
+
+  return {
+    ...action,
+    type: "update_storage_place",
+    ...(currentName !== undefined ? { currentName } : {}),
+    ...(name !== undefined ? { name } : {})
+  };
+};
+
 const toTrustedPersonStorageAction = (action: Record<string, unknown>) => {
   const partyName = typeof action.partyName === "string" ? action.partyName.trim() : "";
   const amount = Number(action.amount);
@@ -449,6 +477,13 @@ function normalizeLooseParserJson(json: unknown, todayIso: string, rawText: stri
 
         if (action.type === "create_storage_place") {
           return normalizeCreateStorageAction(action, rawText);
+        }
+
+        if (
+          action.type === "update_storage_place" ||
+          action.type === "rename_storage_place"
+        ) {
+          return normalizeUpdateStorageAction(action);
         }
 
         if (action.type === "create_debt") {

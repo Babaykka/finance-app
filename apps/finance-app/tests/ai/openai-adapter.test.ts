@@ -366,6 +366,47 @@ describe("OpenAI parser adapter", () => {
     });
   });
 
+  it("normalizes loose storage rename responses into a storage update action", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.88,
+        summary: "Переименовать Нал cash.",
+        actions: [
+          {
+            type: "rename_storage_place",
+            oldName: "Нал cash",
+            newName: "Наличные в кошельке"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "переименуй Нал cash в наличные в кошельке",
+      context: {
+        todayIso: "2026-06-05",
+        timezone: "Europe/Moscow",
+        knownDebts: [],
+        knownStoragePlaces: [
+          {
+            id: "storage-cash",
+            name: "Нал cash",
+            asset: "RUB",
+            amount: 90000
+          }
+        ]
+      }
+    });
+
+    expect(result.actions[0]).toEqual({
+      type: "update_storage_place",
+      currentName: "Нал cash",
+      name: "Наличные в кошельке"
+    });
+  });
+
   it("rejects missing response output text", async () => {
     const create = vi.fn().mockResolvedValue({ output_text: "" });
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");

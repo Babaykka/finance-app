@@ -5,6 +5,7 @@ import {
   AvailabilitySchema,
   DebtStatusSchema,
   DebtTypeSchema,
+  StorageStatusSchema,
   StorageSubtypeSchema,
   StorageTypeSchema
 } from "@/domain/enums";
@@ -38,6 +39,48 @@ const CreateStorageActionSchema = z.object({
   comment: NonEmptyStringSchema.optional()
 });
 
+const UpdateStorageActionSchema = z
+  .object({
+    type: z.literal("update_storage_place"),
+    storagePlaceId: NonEmptyStringSchema.optional(),
+    currentName: NonEmptyStringSchema.optional(),
+    name: NonEmptyStringSchema.optional(),
+    storageType: StorageTypeSchema.optional(),
+    subtype: StorageSubtypeSchema.optional(),
+    holderContext: NonEmptyStringSchema.optional(),
+    asset: AssetSchema.optional(),
+    amount: z.number().nonnegative().optional(),
+    amountKind: z.enum(["exact", "equivalent", "estimated"]).optional(),
+    availability: AvailabilitySchema.optional(),
+    rate: z.number().optional(),
+    interestPaymentDay: z.number().int().min(1).max(31).optional(),
+    status: StorageStatusSchema.optional(),
+    attentionPriority: AttentionPrioritySchema.optional(),
+    comment: NonEmptyStringSchema.optional()
+  })
+  .refine((action) => action.storagePlaceId !== undefined || action.currentName !== undefined, {
+    message: "update_storage_place requires storagePlaceId or currentName"
+  })
+  .refine(
+    (action) =>
+      action.name !== undefined ||
+      action.storageType !== undefined ||
+      action.subtype !== undefined ||
+      action.holderContext !== undefined ||
+      action.asset !== undefined ||
+      action.amount !== undefined ||
+      action.amountKind !== undefined ||
+      action.availability !== undefined ||
+      action.rate !== undefined ||
+      action.interestPaymentDay !== undefined ||
+      action.status !== undefined ||
+      action.attentionPriority !== undefined ||
+      action.comment !== undefined,
+    {
+      message: "update_storage_place requires at least one changed field"
+    }
+  );
+
 const CreateDebtActionSchema = z.object({
   type: z.literal("create_debt"),
   partyName: NonEmptyStringSchema,
@@ -68,6 +111,7 @@ const RecordDebtPaymentActionSchema = z
 
 export const AiActionSchema = z.discriminatedUnion("type", [
   CreateStorageActionSchema,
+  UpdateStorageActionSchema,
   CreateDebtActionSchema,
   RecordDebtPaymentActionSchema
 ]);
