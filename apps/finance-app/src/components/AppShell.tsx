@@ -36,6 +36,25 @@ export function AppShell({
             <span>{subtitle ?? "личный контур"}</span>
           </span>
         </Link>
+        <nav className="topnav" aria-label="Основная навигация">
+          {navigation.map((item) => {
+            const Icon = item.icon;
+            const isActive = item.section === active;
+
+            return (
+              <Link
+                aria-current={isActive ? "page" : undefined}
+                className={isActive ? "topnav-item topnav-item-active" : "topnav-item"}
+                href={item.href}
+                key={item.href}
+                title={item.label}
+              >
+                <Icon aria-hidden="true" size={17} strokeWidth={2.1} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
         <div className="topbar-title">{title}</div>
       </header>
 

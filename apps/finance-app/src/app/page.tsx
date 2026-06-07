@@ -3,14 +3,13 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { DataUnavailable } from "@/components/DataUnavailable";
 import { QuickAddPanel } from "@/components/QuickAddPanel";
+import { StoragePlaceCard } from "@/components/StoragePlaceCard";
 import { SummaryCard } from "@/components/SummaryCard";
 import { formatMoney } from "@/domain/money";
 import {
-  getAvailabilityLabel,
   getDebtTypeLabel,
   getFinanceViewData,
-  getStatusLabel,
-  getStorageTypeLabel
+  getStatusLabel
 } from "@/server/ui/finance-view-data";
 
 export const dynamic = "force-dynamic";
@@ -134,20 +133,7 @@ export default async function HomePage() {
           {attentionPlaces.length > 0 ? (
             <div className="item-list">
               {attentionPlaces.slice(0, 4).map((place) => (
-                <article className="item-card" key={place.id}>
-                  <div className="item-main">
-                    <div>
-                      <p className="eyebrow">{getStorageTypeLabel(place.type, place.subtype)}</p>
-                      <h3>{place.name}</h3>
-                    </div>
-                    <span className="amount">{formatMoney(place.amount, place.asset)}</span>
-                  </div>
-                  <div className="item-meta">
-                    <span className="pill pill-warn">{getStatusLabel(place.status)}</span>
-                    <span className="pill">{getAvailabilityLabel(place.availability)}</span>
-                  </div>
-                  <p className="item-note">{place.holderContext}</p>
-                </article>
+                <StoragePlaceCard key={place.id} place={place} />
               ))}
             </div>
           ) : (

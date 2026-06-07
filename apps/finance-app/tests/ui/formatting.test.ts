@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { formatStorageRate } from "@/app/storage/page";
+import {
+  formatStorageInterestPaymentDay,
+  formatStorageRate
+} from "@/components/StoragePlaceCard";
 import { formatMoney } from "@/domain/money";
 import {
   sortDebtsForView,
@@ -16,7 +19,13 @@ describe("UI formatting", () => {
 
   it("renders storage rates as stored percent values", () => {
     expect(formatStorageRate(6.5)).toBe("6,5%");
-    expect(formatStorageRate(null)).toBeNull();
+    expect(formatStorageRate(null)).toBe("0%");
+  });
+
+  it("renders storage interest payment day for every storage card", () => {
+    expect(formatStorageInterestPaymentDay(7, 5)).toBe("5-е число");
+    expect(formatStorageInterestPaymentDay(0, null)).toBe("нет");
+    expect(formatStorageInterestPaymentDay(6.5, null)).toBe("дата не указана");
   });
 
   it("sorts storage places by attention priority rank", () => {

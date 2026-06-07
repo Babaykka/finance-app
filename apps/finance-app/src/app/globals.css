@@ -141,16 +141,46 @@ button:disabled {
 
 .topbar-title {
   overflow: hidden;
-  max-width: 48%;
+  max-width: 22%;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.topnav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.topnav-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 11px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.topnav-item-active {
+  border-color: rgba(15, 107, 99, 0.2);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .content {
   width: min(100%, 1040px);
   margin: 0 auto;
-  padding: 18px 16px 96px;
+  padding: 18px 16px 42px;
 }
 
 .grid,
@@ -283,7 +313,8 @@ button:disabled {
 .primary-button:focus-visible,
 .icon-action:focus-visible,
 .tool-link:focus-visible,
-.navitem:focus-visible {
+.navitem:focus-visible,
+.topnav-item:focus-visible {
   outline: 3px solid rgba(15, 107, 99, 0.22);
   outline-offset: 2px;
 }
@@ -455,6 +486,89 @@ button:disabled {
   padding: 14px;
 }
 
+.storage-card {
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+}
+
+.storage-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.storage-card-title {
+  min-width: 0;
+}
+
+.storage-card-title h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
+}
+
+.storage-amount {
+  flex: 0 1 48%;
+  line-height: 1.12;
+}
+
+.storage-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.storage-fact {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--surface-strong);
+}
+
+.storage-fact-positive {
+  border-color: rgba(15, 107, 99, 0.24);
+  background: var(--accent-soft);
+}
+
+.storage-fact-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.storage-fact strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.storage-meta {
+  gap: 6px;
+  margin-top: 0;
+}
+
+.storage-meta .pill {
+  min-height: 25px;
+  padding: 0 9px;
+}
+
+.storage-note {
+  margin-top: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
 .item-main > div {
   min-width: 0;
 }
@@ -533,16 +647,7 @@ button:disabled {
 }
 
 .bottomnav {
-  position: sticky;
-  bottom: 0;
-  z-index: 12;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  padding: 8px max(10px, env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.92);
-  border-top: 1px solid var(--line);
-  backdrop-filter: blur(18px);
+  display: none;
 }
 
 .navitem {
@@ -577,6 +682,14 @@ button:disabled {
   .item-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .topbar-title {
+    display: none;
+  }
+
+  .topnav-item {
+    padding: 0 9px;
+  }
 }
 
 @media (max-width: 560px) {
@@ -585,12 +698,26 @@ button:disabled {
   }
 
   .brandtext span,
-  .topbar-title {
+  .topbar-title,
+  .topnav {
     display: none;
   }
 
+  .bottomnav {
+    position: sticky;
+    bottom: 0;
+    z-index: 12;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px max(10px, env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom));
+    background: rgba(255, 255, 255, 0.92);
+    border-top: 1px solid var(--line);
+    backdrop-filter: blur(18px);
+  }
+
   .content {
-    padding: 14px 12px 92px;
+    padding: 14px 12px 116px;
   }
 
   .overview-grid {
@@ -613,6 +740,16 @@ button:disabled {
   .item-card .item-main {
     align-items: flex-start;
     flex-wrap: wrap;
+  }
+
+  .storage-card-top {
+    display: grid;
+    gap: 6px;
+  }
+
+  .storage-amount {
+    width: 100%;
+    text-align: left;
   }
 
   .item-card .amount {
