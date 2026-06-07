@@ -3,6 +3,14 @@ import { getOpenAiClient } from "../src/server/ai/openai-adapter";
 import type { OpenAiTranscriptionClient } from "../src/server/ai/transcription";
 import { transcribeAudioFile } from "../src/server/ai/transcription";
 import { answerTelegramAssistantMessage } from "../src/server/services/assistant-message-service";
+import { createDraftFromCorrectedMessage } from "../src/server/services/draft-correction-service";
+import { createDraftFromParseResult } from "../src/server/services/parse-message-service";
+import {
+  clearTelegramConversationState,
+  getTelegramConversationState,
+  setTelegramConversationState
+} from "../src/server/services/telegram-conversation-state-service";
+import { prisma } from "../src/server/db";
 import {
   answerTelegramCallbackQuery,
   deleteTelegramWebhook,
@@ -158,6 +166,8 @@ async function main() {
             transcribeModel: optionalEnv("OPENAI_TRANSCRIBE_MODEL"),
             parseMessage: (body) =>
               postJson<DraftResult>(new URL("/api/parse-message", appBaseUrl).toString(), body),
+            createDraftFromParseResult,
+            correctDraft: createDraftFromCorrectedMessage,
             answerMessage: answerTelegramAssistantMessage,
             confirmDraft: (draftId) =>
               postDraftMutation(
@@ -169,6 +179,11 @@ async function main() {
                 new URL(`/api/ai-drafts/${encodeURIComponent(draftId)}/reject`, appBaseUrl)
                   .toString()
               ),
+            getConversationState: (telegramUserId) =>
+              getTelegramConversationState(prisma, { telegramUserId }),
+            setConversationState: (state) => setTelegramConversationState(prisma, state),
+            clearConversationState: (telegramUserId) =>
+              clearTelegramConversationState(prisma, telegramUserId),
             sendTelegramMessage,
             answerTelegramCallbackQuery,
             downloadTelegramVoiceFile,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AiParseResult } from "@/server/ai/schema";
 import type { OpenAiTranscriptionClient } from "@/server/ai/transcription";
 
 const DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
@@ -58,6 +59,10 @@ type ParseMessageInput = {
   transcript?: string;
 };
 
+type DirectDraftInput = ParseMessageInput & {
+  parseResult: AiParseResult;
+};
+
 type AnswerMessageInput = {
   text: string;
   telegramUserId: string;
@@ -75,6 +80,16 @@ type DraftMutationResult = {
   body?: unknown;
 };
 
+type ConversationState =
+  | {
+      kind: "awaiting_storage_rename_name";
+      payload: Record<string, unknown>;
+    }
+  | {
+      kind: "awaiting_draft_correction";
+      payload: Record<string, unknown>;
+    };
+
 type ProcessTelegramUpdateInput = {
   update: unknown;
   fetcher: Fetcher;
@@ -82,9 +97,18 @@ type ProcessTelegramUpdateInput = {
   allowedUserId?: string;
   transcribeModel?: string;
   parseMessage: (body: ParseMessageInput) => Promise<DraftResult>;
+  createDraftFromParseResult: (body: DirectDraftInput) => Promise<DraftResult>;
+  correctDraft: (body: ParseMessageInput & { draftId: string }) => Promise<DraftResult>;
   answerMessage: (body: AnswerMessageInput) => Promise<AnswerMessageResult>;
   confirmDraft: (draftId: string) => Promise<DraftMutationResult>;
   rejectDraft: (draftId: string) => Promise<DraftMutationResult>;
+  getConversationState: (telegramUserId: string) => Promise<ConversationState | null>;
+  setConversationState: (input: {
+    telegramUserId: string;
+    kind: ConversationState["kind"];
+    payload: Record<string, unknown>;
+  }) => Promise<unknown>;
+  clearConversationState: (telegramUserId: string) => Promise<unknown>;
   sendTelegramMessage: (input: {
     fetcher: Fetcher;
     botToken: string;
@@ -167,6 +191,97 @@ const getCommand = (text: string) => {
 
   return null;
 };
+
+const stripTelegramText = (text: string) =>
+  text
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[?.!]+$/u, "")
+    .trim();
+
+const cleanStorageName = (value: string) =>
+  stripTelegramText(value)
+    .replace(/^["'«]+/u, "")
+    .replace(/["'»]+$/u, "")
+    .trim();
+
+const getPayloadString = (payload: Record<string, unknown>, key: string) => {
+  const value = payload[key];
+
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+};
+
+type StorageRenameIntent = {
+  currentName: string;
+  newName: string;
+};
+
+const parseCompleteStorageRenameIntent = (text: string): StorageRenameIntent | null => {
+  const cleaned = stripTelegramText(text);
+  const patterns = [
+    /^(?:можешь\s+)?(?:переименуй|переименовать|поменяй\s+название|измени\s+название|назови)\s+(.+?)\s+(?:в|на)\s+(.+)$/iu,
+    /^название\s+(.+?)\s+(?:можешь\s+)?(?:поменять|изменить)\s+(?:в|на)\s+(.+)$/iu,
+    /^(.+?)\s+(?:можешь\s+)?(?:переименовать|поменять\s+название|изменить\s+название)\s+(?:в|на)\s+(.+)$/iu
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleaned.match(pattern);
+    if (!match?.[1] || !match[2]) {
+      continue;
+    }
+
+    const currentName = cleanStorageName(match[1]);
+    const newName = cleanStorageName(match[2]);
+    if (currentName && newName) {
+      return { currentName, newName };
+    }
+  }
+
+  return null;
+};
+
+const parseIncompleteStorageRenameIntent = (text: string) => {
+  const cleaned = stripTelegramText(text);
+  const patterns = [
+    /^(?:можешь\s+)?(?:переименуй|переименовать|поменяй\s+название|измени\s+название)\s+(.+)$/iu,
+    /^название\s+(.+?)\s+(?:можешь\s+)?(?:поменять|изменить)$/iu,
+    /^(.+?)\s+(?:можешь\s+)?(?:переименовать|поменять\s+название|изменить\s+название)$/iu
+  ];
+
+  if (parseCompleteStorageRenameIntent(cleaned)) {
+    return null;
+  }
+
+  for (const pattern of patterns) {
+    const match = cleaned.match(pattern);
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const currentName = cleanStorageName(match[1]);
+    if (currentName) {
+      return { currentName };
+    }
+  }
+
+  return null;
+};
+
+const buildStorageRenameParseResult = (
+  currentName: string,
+  newName: string
+): AiParseResult => ({
+  confidence: 0.98,
+  summary: `Переименовать ${currentName} в ${newName}.`,
+  actions: [
+    {
+      type: "update_storage_place",
+      currentName,
+      name: newName
+    }
+  ],
+  needsClarification: []
+});
 
 const normalizeIntentText = (text: string) =>
   text
@@ -306,6 +421,22 @@ export function parseDraftCallbackData(value: string | undefined) {
   };
 }
 
+async function sendDraftConfirmation(
+  input: ProcessTelegramUpdateInput,
+  message: TelegramMessage,
+  draft: DraftResult
+) {
+  const response = buildTelegramDraftConfirmation(draft);
+
+  await input.sendTelegramMessage({
+    fetcher: input.fetcher,
+    botToken: input.botToken,
+    ...messageTarget(message),
+    text: response.text,
+    buttons: response.buttons
+  });
+}
+
 async function processTextMessage(input: ProcessTelegramUpdateInput, message: TelegramMessage) {
   const command = getCommand(message.text ?? "");
   if (command) {
@@ -331,10 +462,94 @@ async function processNaturalLanguageMessage(
   message: TelegramMessage,
   content: ParseMessageInput
 ) {
+  const telegramUserId = String(message.from.id);
+  const conversationState = await input.getConversationState(telegramUserId);
+
+  if (conversationState?.kind === "awaiting_storage_rename_name") {
+    const currentName = getPayloadString(conversationState.payload, "currentName");
+    const newName = cleanStorageName(content.text);
+
+    if (currentName && newName) {
+      const draft = await input.createDraftFromParseResult({
+        ...content,
+        parseResult: buildStorageRenameParseResult(currentName, newName)
+      });
+
+      await input.clearConversationState(telegramUserId);
+      await sendDraftConfirmation(input, message, draft);
+
+      return { ok: true, handled: "text" as const };
+    }
+
+    await input.clearConversationState(telegramUserId);
+  }
+
+  if (conversationState?.kind === "awaiting_draft_correction") {
+    const draftId = getPayloadString(conversationState.payload, "draftId");
+
+    if (!draftId) {
+      await input.clearConversationState(telegramUserId);
+    } else {
+      const draft = await input.correctDraft({
+        draftId,
+        text: content.text,
+        source: content.source,
+        ...(content.transcript ? { transcript: content.transcript } : {})
+      });
+
+      await input.clearConversationState(telegramUserId);
+      await sendDraftConfirmation(input, message, draft);
+
+      return {
+        ok: true,
+        handled: content.source === "telegram_voice" ? ("voice" as const) : ("text" as const)
+      };
+    }
+  }
+
+  const directStorageRename = parseCompleteStorageRenameIntent(content.text);
+  if (directStorageRename) {
+    const draft = await input.createDraftFromParseResult({
+      ...content,
+      parseResult: buildStorageRenameParseResult(
+        directStorageRename.currentName,
+        directStorageRename.newName
+      )
+    });
+
+    await sendDraftConfirmation(input, message, draft);
+
+    return {
+      ok: true,
+      handled: content.source === "telegram_voice" ? ("voice" as const) : ("text" as const)
+    };
+  }
+
+  const incompleteStorageRename = parseIncompleteStorageRenameIntent(content.text);
+  if (incompleteStorageRename) {
+    await input.setConversationState({
+      telegramUserId,
+      kind: "awaiting_storage_rename_name",
+      payload: {
+        currentName: incompleteStorageRename.currentName
+      }
+    });
+
+    await input.sendTelegramMessage({
+      fetcher: input.fetcher,
+      botToken: input.botToken,
+      ...messageTarget(message),
+      text: `Как назвать «${incompleteStorageRename.currentName}»?`,
+      buttons: []
+    });
+
+    return { ok: true, handled: "awaiting_storage_rename_name" as const };
+  }
+
   if (!shouldCreateDraftFromText(content.text)) {
     const answer = await input.answerMessage({
       text: content.text,
-      telegramUserId: String(message.from.id),
+      telegramUserId,
       source: content.source,
       ...(content.transcript ? { transcript: content.transcript } : {})
     });
@@ -355,17 +570,12 @@ async function processNaturalLanguageMessage(
     source: content.source,
     ...(content.transcript ? { transcript: content.transcript } : {})
   });
-  const response = buildTelegramDraftConfirmation(draft);
+  await sendDraftConfirmation(input, message, draft);
 
-  await input.sendTelegramMessage({
-    fetcher: input.fetcher,
-    botToken: input.botToken,
-    ...messageTarget(message),
-    text: response.text,
-    buttons: response.buttons
-  });
-
-  return { ok: true, handled: content.source === "telegram_voice" ? ("voice" as const) : ("text" as const) };
+  return {
+    ok: true,
+    handled: content.source === "telegram_voice" ? ("voice" as const) : ("text" as const)
+  };
 }
 
 async function processVoiceMessage(input: ProcessTelegramUpdateInput, message: TelegramMessage) {
@@ -436,6 +646,12 @@ async function processCallbackQuery(
   }
 
   if (callbackData.action === "edit") {
+    await input.setConversationState({
+      telegramUserId: String(callback.from.id),
+      kind: "awaiting_draft_correction",
+      payload: { draftId: callbackData.draftId }
+    });
+
     await input.answerTelegramCallbackQuery({
       fetcher: input.fetcher,
       botToken: input.botToken,
@@ -449,7 +665,7 @@ async function processCallbackQuery(
         fetcher: input.fetcher,
         botToken: input.botToken,
         ...target,
-        text: "Отправь исправленную формулировку новым сообщением, я создам новый черновик.",
+        text: "Напиши исправление следующим сообщением. Можно коротко: «сумма 100000», «это не долг, а мои деньги у человека», или полную новую формулировку.",
         buttons: []
       });
     }

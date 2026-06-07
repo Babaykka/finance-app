@@ -208,6 +208,18 @@ model AssistantMemory {
   @@unique([ownerId, kind, text])
 }
 
+model TelegramConversationState {
+  id             String   @id @default(cuid())
+  telegramUserId String   @unique
+  kind           String
+  payload        Json     @default("{}")
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   ownerId    String

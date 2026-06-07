@@ -6,9 +6,14 @@ const createDependencies = () => ({
   botToken: "token",
   allowedUserId: "123",
   parseMessage: vi.fn(),
+  createDraftFromParseResult: vi.fn(),
+  correctDraft: vi.fn(),
   answerMessage: vi.fn(),
   confirmDraft: vi.fn(),
   rejectDraft: vi.fn(),
+  getConversationState: vi.fn(),
+  setConversationState: vi.fn(),
+  clearConversationState: vi.fn(),
   sendTelegramMessage: vi.fn(),
   answerTelegramCallbackQuery: vi.fn(),
   downloadTelegramVoiceFile: vi.fn(),
@@ -193,9 +198,9 @@ describe("processTelegramUpdate", () => {
     expect(result).toEqual({ ok: true, handled: "text" });
   });
 
-  it("creates drafts for storage rename requests without an amount", async () => {
+  it("creates storage rename drafts directly without calling the AI parser", async () => {
     const dependencies = createDependencies();
-    dependencies.parseMessage.mockResolvedValue({
+    dependencies.createDraftFromParseResult.mockResolvedValue({
       id: "draft-rename-storage",
       parsedActions: {
         summary: "Переименовать Нал cash в Наличные в кошельке."
@@ -214,9 +219,22 @@ describe("processTelegramUpdate", () => {
     });
 
     expect(dependencies.answerMessage).not.toHaveBeenCalled();
-    expect(dependencies.parseMessage).toHaveBeenCalledWith({
+    expect(dependencies.parseMessage).not.toHaveBeenCalled();
+    expect(dependencies.createDraftFromParseResult).toHaveBeenCalledWith({
       text: "переименуй Нал cash в наличные в кошельке",
-      source: "telegram_text"
+      source: "telegram_text",
+      parseResult: {
+        confidence: 0.98,
+        summary: "Переименовать Нал cash в наличные в кошельке.",
+        actions: [
+          {
+            type: "update_storage_place",
+            currentName: "Нал cash",
+            name: "наличные в кошельке"
+          }
+        ],
+        needsClarification: []
+      }
     });
     expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
       fetcher: dependencies.fetcher,
@@ -227,6 +245,97 @@ describe("processTelegramUpdate", () => {
         { text: "Сохранить", callbackData: "draft:draft-rename-storage:confirm" },
         { text: "Исправить", callbackData: "draft:draft-rename-storage:edit" },
         { text: "Отмена", callbackData: "draft:draft-rename-storage:reject" }
+      ]
+    });
+    expect(result).toEqual({ ok: true, handled: "text" });
+  });
+
+  it("asks for the new name when a storage rename request is incomplete", async () => {
+    const dependencies = createDependencies();
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "название Нал cash можешь поменять?"
+        }
+      }
+    });
+
+    expect(dependencies.parseMessage).not.toHaveBeenCalled();
+    expect(dependencies.answerMessage).not.toHaveBeenCalled();
+    expect(dependencies.setConversationState).toHaveBeenCalledWith({
+      telegramUserId: "123",
+      kind: "awaiting_storage_rename_name",
+      payload: {
+        currentName: "Нал cash"
+      }
+    });
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Как назвать «Нал cash»?",
+      buttons: []
+    });
+    expect(result).toEqual({ ok: true, handled: "awaiting_storage_rename_name" });
+  });
+
+  it("creates a storage rename draft from the next message after an incomplete rename", async () => {
+    const dependencies = createDependencies();
+    dependencies.getConversationState.mockResolvedValue({
+      kind: "awaiting_storage_rename_name",
+      payload: {
+        currentName: "Нал cash"
+      }
+    });
+    dependencies.createDraftFromParseResult.mockResolvedValue({
+      id: "draft-rename-followup",
+      parsedActions: {
+        summary: "Переименовать Нал cash в Наличные в кошельке."
+      }
+    });
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "Наличные в кошельке"
+        }
+      }
+    });
+
+    expect(dependencies.parseMessage).not.toHaveBeenCalled();
+    expect(dependencies.createDraftFromParseResult).toHaveBeenCalledWith({
+      text: "Наличные в кошельке",
+      source: "telegram_text",
+      parseResult: {
+        confidence: 0.98,
+        summary: "Переименовать Нал cash в Наличные в кошельке.",
+        actions: [
+          {
+            type: "update_storage_place",
+            currentName: "Нал cash",
+            name: "Наличные в кошельке"
+          }
+        ],
+        needsClarification: []
+      }
+    });
+    expect(dependencies.clearConversationState).toHaveBeenCalledWith("123");
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Черновик: Переименовать Нал cash в Наличные в кошельке.",
+      buttons: [
+        { text: "Сохранить", callbackData: "draft:draft-rename-followup:confirm" },
+        { text: "Исправить", callbackData: "draft:draft-rename-followup:edit" },
+        { text: "Отмена", callbackData: "draft:draft-rename-followup:reject" }
       ]
     });
     expect(result).toEqual({ ok: true, handled: "text" });
@@ -306,6 +415,85 @@ describe("processTelegramUpdate", () => {
       callbackAction: "confirm",
       draftId: "draft-1"
     });
+  });
+
+  it("stores edit state when the user taps the edit draft button", async () => {
+    const dependencies = createDependencies();
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        callback_query: {
+          id: "callback-edit",
+          from: { id: 123 },
+          message: { chat: { id: 456 } },
+          data: "draft:draft-1:edit"
+        }
+      }
+    });
+
+    expect(dependencies.setConversationState).toHaveBeenCalledWith({
+      telegramUserId: "123",
+      kind: "awaiting_draft_correction",
+      payload: { draftId: "draft-1" }
+    });
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Напиши исправление следующим сообщением. Можно коротко: «сумма 100000», «это не долг, а мои деньги у человека», или полную новую формулировку.",
+      buttons: []
+    });
+    expect(result).toEqual({
+      ok: true,
+      handled: "callback",
+      callbackAction: "edit",
+      draftId: "draft-1"
+    });
+  });
+
+  it("creates a replacement draft through the correction service after edit-state text", async () => {
+    const dependencies = createDependencies();
+    dependencies.getConversationState.mockResolvedValue({
+      kind: "awaiting_draft_correction",
+      payload: { draftId: "draft-old" }
+    });
+    dependencies.correctDraft.mockResolvedValue({
+      id: "draft-new",
+      parsedActions: { summary: "Исправленный черновик." }
+    });
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "сумма 100000"
+        }
+      }
+    });
+
+    expect(dependencies.parseMessage).not.toHaveBeenCalled();
+    expect(dependencies.rejectDraft).not.toHaveBeenCalled();
+    expect(dependencies.correctDraft).toHaveBeenCalledWith({
+      draftId: "draft-old",
+      text: "сумма 100000",
+      source: "telegram_text"
+    });
+    expect(dependencies.clearConversationState).toHaveBeenCalledWith("123");
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Черновик: Исправленный черновик.",
+      buttons: [
+        { text: "Сохранить", callbackData: "draft:draft-new:confirm" },
+        { text: "Исправить", callbackData: "draft:draft-new:edit" },
+        { text: "Отмена", callbackData: "draft:draft-new:reject" }
+      ]
+    });
+    expect(result).toEqual({ ok: true, handled: "text" });
   });
 
   it("rejects a draft from an inline callback button", async () => {

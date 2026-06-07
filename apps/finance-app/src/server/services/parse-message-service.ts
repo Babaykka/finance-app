@@ -6,6 +6,7 @@ import { createOpenAiParser, getOpenAiClient } from "@/server/ai/openai-adapter"
 import { prisma } from "@/server/db";
 import { getLocalOwner } from "@/server/auth/local-owner";
 import { createAiDraft } from "@/server/services/draft-service";
+import { AiParseResultSchema } from "@/server/ai/schema";
 
 const DEFAULT_PARSE_MODEL = "gpt-5.2";
 
@@ -15,6 +16,13 @@ export const ParseMessageRequestSchema = z.object({
     .enum(["telegram_text", "telegram_voice", "web_text", "web_form"])
     .default("web_text"),
   transcript: z.string().trim().min(1).optional()
+});
+
+export const CreateDraftFromParseResultRequestSchema = z.object({
+  text: z.string().trim().min(1),
+  source: z.enum(["telegram_text", "telegram_voice", "web_text", "web_form"]).default("web_text"),
+  transcript: z.string().trim().min(1).optional(),
+  parseResult: AiParseResultSchema
 });
 
 type ParseMessageSource = z.infer<typeof ParseMessageRequestSchema>["source"];
@@ -96,5 +104,18 @@ export async function createDraftFromParsedMessage(rawInput: unknown) {
     rawText: body.text,
     transcript: body.transcript,
     parseResult
+  });
+}
+
+export async function createDraftFromParseResult(rawInput: unknown) {
+  const body = CreateDraftFromParseResultRequestSchema.parse(rawInput);
+  const owner = await getLocalOwner();
+
+  return createAiDraft(prisma, {
+    ownerId: owner.id,
+    source: mapParseSourceToDraftSource(body.source),
+    rawText: body.text,
+    transcript: body.transcript,
+    parseResult: body.parseResult
   });
 }

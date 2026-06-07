@@ -5,27 +5,43 @@ const mocks = vi.hoisted(() => {
   const sendTelegramMessage = vi.fn();
   const answerTelegramCallbackQuery = vi.fn();
   const createDraftFromParsedMessage = vi.fn();
+  const createDraftFromParseResult = vi.fn();
+  const createDraftFromCorrectedMessage = vi.fn();
   const answerTelegramAssistantMessage = vi.fn();
+  const getTelegramConversationState = vi.fn();
+  const setTelegramConversationState = vi.fn();
+  const clearTelegramConversationState = vi.fn();
   const downloadTelegramVoiceFile = vi.fn();
   const transcribeAudioFile = vi.fn();
   const getOpenAiClient = vi.fn();
   const confirmAiDraftRoute = vi.fn();
   const rejectAiDraftRoute = vi.fn();
   const openAiClient = { name: "openai-client" };
+  const prisma = { name: "prisma" };
 
   return {
     sendTelegramMessage,
     answerTelegramCallbackQuery,
     createDraftFromParsedMessage,
+    createDraftFromParseResult,
+    createDraftFromCorrectedMessage,
     answerTelegramAssistantMessage,
+    getTelegramConversationState,
+    setTelegramConversationState,
+    clearTelegramConversationState,
     downloadTelegramVoiceFile,
     transcribeAudioFile,
     getOpenAiClient,
     confirmAiDraftRoute,
     rejectAiDraftRoute,
-    openAiClient
+    openAiClient,
+    prisma
   };
 });
+
+vi.mock("@/server/db", () => ({
+  prisma: mocks.prisma
+}));
 
 vi.mock("@/server/telegram/client", () => ({
   answerTelegramCallbackQuery: mocks.answerTelegramCallbackQuery,
@@ -33,7 +49,18 @@ vi.mock("@/server/telegram/client", () => ({
 }));
 
 vi.mock("@/server/services/parse-message-service", () => ({
-  createDraftFromParsedMessage: mocks.createDraftFromParsedMessage
+  createDraftFromParsedMessage: mocks.createDraftFromParsedMessage,
+  createDraftFromParseResult: mocks.createDraftFromParseResult
+}));
+
+vi.mock("@/server/services/draft-correction-service", () => ({
+  createDraftFromCorrectedMessage: mocks.createDraftFromCorrectedMessage
+}));
+
+vi.mock("@/server/services/telegram-conversation-state-service", () => ({
+  clearTelegramConversationState: mocks.clearTelegramConversationState,
+  getTelegramConversationState: mocks.getTelegramConversationState,
+  setTelegramConversationState: mocks.setTelegramConversationState
 }));
 
 vi.mock("@/server/services/assistant-message-service", () => ({
@@ -72,6 +99,8 @@ const expectNoDownstreamCalls = (fetcher: ReturnType<typeof vi.fn>) => {
   expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
   expect(mocks.answerTelegramCallbackQuery).not.toHaveBeenCalled();
   expect(mocks.createDraftFromParsedMessage).not.toHaveBeenCalled();
+  expect(mocks.createDraftFromParseResult).not.toHaveBeenCalled();
+  expect(mocks.createDraftFromCorrectedMessage).not.toHaveBeenCalled();
   expect(mocks.answerTelegramAssistantMessage).not.toHaveBeenCalled();
   expect(mocks.downloadTelegramVoiceFile).not.toHaveBeenCalled();
   expect(mocks.getOpenAiClient).not.toHaveBeenCalled();
@@ -154,6 +183,56 @@ describe("telegram webhook route", () => {
         { text: "Сохранить", callbackData: "draft:draft-1:confirm" },
         { text: "Исправить", callbackData: "draft:draft-1:edit" },
         { text: "Отмена", callbackData: "draft:draft-1:reject" }
+      ]
+    });
+    await expect(response.json()).resolves.toEqual({ ok: true, handled: "text" });
+  });
+
+  it("handles direct storage rename commands without calling the AI parser", async () => {
+    const draft = {
+      id: "draft-rename",
+      parsedActions: { summary: "Переименовать Нал cash в Наличные в кошельке." }
+    };
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    mocks.createDraftFromParseResult.mockResolvedValue(draft);
+
+    const response = await POST(
+      telegramWebhookRequest({
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "переименуй Нал cash в Наличные в кошельке"
+        }
+      })
+    );
+
+    expect(mocks.createDraftFromParsedMessage).not.toHaveBeenCalled();
+    expect(mocks.createDraftFromParseResult).toHaveBeenCalledWith({
+      text: "переименуй Нал cash в Наличные в кошельке",
+      source: "telegram_text",
+      parseResult: {
+        confidence: 0.98,
+        summary: "Переименовать Нал cash в Наличные в кошельке.",
+        actions: [
+          {
+            type: "update_storage_place",
+            currentName: "Нал cash",
+            name: "Наличные в кошельке"
+          }
+        ],
+        needsClarification: []
+      }
+    });
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Черновик: Переименовать Нал cash в Наличные в кошельке.",
+      buttons: [
+        { text: "Сохранить", callbackData: "draft:draft-rename:confirm" },
+        { text: "Исправить", callbackData: "draft:draft-rename:edit" },
+        { text: "Отмена", callbackData: "draft:draft-rename:reject" }
       ]
     });
     await expect(response.json()).resolves.toEqual({ ok: true, handled: "text" });

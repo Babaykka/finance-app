@@ -12,32 +12,48 @@ type DraftMutationRouteHandler = (
 const getRouteDependencies = async () => {
   const [
     { getOpenAiClient },
-    { createDraftFromParsedMessage },
+    { createDraftFromParsedMessage, createDraftFromParseResult },
     { answerTelegramAssistantMessage },
+    { createDraftFromCorrectedMessage },
     { transcribeAudioFile },
     { answerTelegramCallbackQuery, sendTelegramMessage },
     { downloadTelegramVoiceFile },
+    {
+      clearTelegramConversationState,
+      getTelegramConversationState,
+      setTelegramConversationState
+    },
+    { prisma },
     { POST: confirmAiDraftRoute },
     { POST: rejectAiDraftRoute }
   ] = await Promise.all([
     import("@/server/ai/openai-adapter"),
     import("@/server/services/parse-message-service"),
     import("@/server/services/assistant-message-service"),
+    import("@/server/services/draft-correction-service"),
     import("@/server/ai/transcription"),
     import("@/server/telegram/client"),
     import("@/server/telegram/voice"),
+    import("@/server/services/telegram-conversation-state-service"),
+    import("@/server/db"),
     import("@/app/api/ai-drafts/[id]/confirm/route"),
     import("@/app/api/ai-drafts/[id]/reject/route")
   ]);
 
   return {
     createDraftFromParsedMessage,
+    createDraftFromParseResult,
     answerTelegramAssistantMessage,
+    createDraftFromCorrectedMessage,
     getOpenAiClient,
     transcribeAudioFile,
     answerTelegramCallbackQuery,
     sendTelegramMessage,
     downloadTelegramVoiceFile,
+    clearTelegramConversationState,
+    getTelegramConversationState,
+    setTelegramConversationState,
+    prisma,
     confirmAiDraftRoute: confirmAiDraftRoute as DraftMutationRouteHandler,
     rejectAiDraftRoute: rejectAiDraftRoute as DraftMutationRouteHandler
   };
@@ -103,12 +119,18 @@ export async function POST(request: Request) {
   const {
     answerTelegramCallbackQuery,
     answerTelegramAssistantMessage,
+    clearTelegramConversationState,
     confirmAiDraftRoute,
+    createDraftFromCorrectedMessage,
+    createDraftFromParseResult,
     createDraftFromParsedMessage,
     downloadTelegramVoiceFile,
+    getTelegramConversationState,
     getOpenAiClient,
     rejectAiDraftRoute,
     sendTelegramMessage,
+    setTelegramConversationState,
+    prisma,
     transcribeAudioFile
   } = await getRouteDependencies();
   let result: unknown;
@@ -124,9 +146,16 @@ export async function POST(request: Request) {
       allowedUserId: process.env.TELEGRAM_ALLOWED_USER_ID,
       transcribeModel: process.env.OPENAI_TRANSCRIBE_MODEL ?? DEFAULT_TRANSCRIBE_MODEL,
       parseMessage: createDraftFromParsedMessage,
+      createDraftFromParseResult,
+      correctDraft: createDraftFromCorrectedMessage,
       answerMessage: answerTelegramAssistantMessage,
       confirmDraft: (draftId) => callDraftMutationRoute(confirmAiDraftRoute, draftId),
       rejectDraft: (draftId) => callDraftMutationRoute(rejectAiDraftRoute, draftId),
+      getConversationState: (telegramUserId) =>
+        getTelegramConversationState(prisma, { telegramUserId }),
+      setConversationState: (state) => setTelegramConversationState(prisma, state),
+      clearConversationState: (telegramUserId) =>
+        clearTelegramConversationState(prisma, telegramUserId),
       sendTelegramMessage: sendUserVisibleTelegramMessage,
       answerTelegramCallbackQuery,
       downloadTelegramVoiceFile,
