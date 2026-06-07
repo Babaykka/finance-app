@@ -332,6 +332,117 @@ describe("OpenAI parser adapter", () => {
     expect(result.needsClarification).toEqual([]);
   });
 
+  it("allows several partial payments to the same single matching debt", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.88,
+        summary: "Записать две оплаты Вероники по одному долгу.",
+        actions: [
+          {
+            type: "record_debt_payment",
+            partyName: "Вероника",
+            amount: 5000,
+            asset: "RUB",
+            paymentDate: "2026-06-07"
+          },
+          {
+            type: "record_debt_payment",
+            partyName: "Вероника",
+            amount: 13000,
+            asset: "RUB",
+            paymentDate: "2026-06-07"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "Вероника оплатила долг 5000 рублей и 13000 рублей, суммарно 18000 из 18000",
+      context: {
+        todayIso: "2026-06-07",
+        timezone: "Europe/Moscow",
+        knownDebts: [
+          {
+            id: "debt-veronika",
+            partyName: "Вероника",
+            remainingAmount: 18000,
+            asset: "RUB"
+          }
+        ],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions).toEqual([
+      {
+        type: "record_debt_payment",
+        partyName: "Вероника",
+        debtId: "debt-veronika",
+        amount: 5000,
+        asset: "RUB",
+        paymentDate: "2026-06-07"
+      },
+      {
+        type: "record_debt_payment",
+        partyName: "Вероника",
+        debtId: "debt-veronika",
+        amount: 13000,
+        asset: "RUB",
+        paymentDate: "2026-06-07"
+      }
+    ]);
+    expect(result.needsClarification).toEqual([]);
+  });
+
+  it("normalizes string amounts in payment drafts before schema validation", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.88,
+        summary: "Записать оплату Степана.",
+        actions: [
+          {
+            type: "record_debt_payment",
+            partyName: "Степан Гаврилюк",
+            amount: "25 000",
+            paidAt: "2026-06-07",
+            comment: "Оплата дипломной работы."
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "Степан Гаврилюк оплатил 25 000 рублей",
+      context: {
+        todayIso: "2026-06-07",
+        timezone: "Europe/Moscow",
+        knownDebts: [
+          {
+            id: "debt-stepan",
+            partyName: "Степан Гаврилюк",
+            remainingAmount: 25000,
+            asset: "RUB"
+          }
+        ],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions[0]).toEqual({
+      type: "record_debt_payment",
+      partyName: "Степан Гаврилюк",
+      debtId: "debt-stepan",
+      amount: 25000,
+      asset: "RUB",
+      paymentDate: "2026-06-07",
+      comment: "Оплата дипломной работы."
+    });
+  });
+
   it("normalizes loose debt creation responses into the required draft schema", async () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
@@ -396,6 +507,54 @@ describe("OpenAI parser adapter", () => {
     ]);
   });
 
+  it("normalizes string debt amounts and next payment amounts", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.84,
+        summary: "Создать долг Даши.",
+        actions: [
+          {
+            type: "create_debt",
+            partyName: "Даша Зайцева",
+            debtType: "work_receivable",
+            basis: "помощь по электричеству",
+            amount: "1 500",
+            asset: "RUB",
+            dueDate: "2026-06-12",
+            nextPaymentAmount: "1 500",
+            status: "scheduled",
+            attentionPriority: "medium"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "Даше Зайцевой помощь по электричеству, она должна оплатить 1500 рублей до 12 июня",
+      context: {
+        todayIso: "2026-06-07",
+        timezone: "Europe/Moscow",
+        knownDebts: [],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions[0]).toEqual({
+      type: "create_debt",
+      partyName: "Даша Зайцева",
+      debtType: "work_receivable",
+      basis: "помощь по электричеству",
+      amount: 1500,
+      asset: "RUB",
+      dueDate: "2026-06-12",
+      nextPaymentAmount: 1500,
+      status: "scheduled",
+      attentionPriority: "medium"
+    });
+  });
+
   it("treats money kept by another person as storage even if AI labels it as debt", async () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
@@ -444,6 +603,92 @@ describe("OpenAI parser adapter", () => {
         comment: "Мои деньги находятся у этого человека; хранитель: Абел."
       }
     ]);
+  });
+
+  it("treats short 'person has my money' wording as trusted-person storage", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.8,
+        summary: "Добавление нового долга к Абелу на сумму 100000 рублей.",
+        actions: [
+          {
+            type: "create_debt",
+            partyName: "Абел",
+            amount: "100к",
+            asset: "RUB"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "У Абела 100к рублей",
+      context: {
+        todayIso: "2026-06-07",
+        timezone: "Europe/Moscow",
+        knownDebts: [],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions[0]).toEqual({
+      type: "create_storage_place",
+      name: "Абел",
+      storageType: "trusted_person",
+      subtype: "not_applicable",
+      holderContext: "Абел",
+      asset: "RUB",
+      amount: 100000,
+      amountKind: "exact",
+      availability: "restricted",
+      attentionPriority: "medium",
+      comment: "Мои деньги находятся у этого человека; хранитель: Абел."
+    });
+  });
+
+  it("treats money on another person's bank account as trusted-person storage", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.82,
+        summary: "Добавление долга Вероники.",
+        actions: [
+          {
+            type: "create_debt",
+            partyName: "Вероника",
+            amount: 804000,
+            asset: "RUB"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "у Вероники на Альфе 804000 рублей",
+      context: {
+        todayIso: "2026-06-07",
+        timezone: "Europe/Moscow",
+        knownDebts: [],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions[0]).toEqual({
+      type: "create_storage_place",
+      name: "Вероника",
+      storageType: "trusted_person",
+      subtype: "not_applicable",
+      holderContext: "Вероника",
+      asset: "RUB",
+      amount: 804000,
+      amountKind: "exact",
+      availability: "restricted",
+      attentionPriority: "medium",
+      comment: "Мои деньги находятся у этого человека; хранитель: Вероника."
+    });
   });
 
   it("normalizes loose trusted-person storage responses into the required draft schema", async () => {
@@ -536,6 +781,106 @@ describe("OpenAI parser adapter", () => {
       amount: 90000,
       amountKind: "exact",
       availability: "immediate",
+      attentionPriority: "medium"
+    });
+  });
+
+  it("corrects cash wallet wording even if AI labels it as a crypto wallet", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.85,
+        summary: "Добавить кошелек с наличными.",
+        actions: [
+          {
+            type: "create_storage_place",
+            name: "Кошелек наличка",
+            storageType: "crypto_wallet",
+            subtype: "wallet",
+            holderContext: "Кошелек наличка",
+            asset: "RUB",
+            amount: "90к",
+            amountKind: "exact",
+            availability: "immediate",
+            attentionPriority: "medium"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "кошелек наличка у меня 90к рублей",
+      context: {
+        todayIso: "2026-06-07",
+        timezone: "Europe/Moscow",
+        knownDebts: [],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions[0]).toEqual({
+      type: "create_storage_place",
+      name: "Наличные",
+      storageType: "cash",
+      subtype: "not_applicable",
+      holderContext: "Наличные",
+      asset: "RUB",
+      amount: 90000,
+      amountKind: "exact",
+      availability: "immediate",
+      attentionPriority: "medium"
+    });
+  });
+
+  it("normalizes string rates and interest days in storage drafts", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        confidence: 0.9,
+        summary: "Добавить Сбер накопительный.",
+        actions: [
+          {
+            type: "create_storage_place",
+            name: "Сбер накопительный",
+            storageType: "income_bank_product",
+            subtype: "savings_account",
+            holderContext: "Сбер",
+            asset: "RUB",
+            amount: "680 000",
+            amountKind: "exact",
+            availability: "restricted",
+            rate: "6,5%",
+            interestPaymentDay: "19",
+            attentionPriority: "medium"
+          }
+        ],
+        needsClarification: []
+      })
+    });
+    const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
+
+    const result = await parser.parseMessage({
+      text: "на моем Сбер накопительный счет лежит 680 000 руб под 6,5% каждое 19 число",
+      context: {
+        todayIso: "2026-06-07",
+        timezone: "Europe/Moscow",
+        knownDebts: [],
+        knownStoragePlaces: []
+      }
+    });
+
+    expect(result.actions[0]).toEqual({
+      type: "create_storage_place",
+      name: "Сбер накопительный",
+      storageType: "income_bank_product",
+      subtype: "savings_account",
+      holderContext: "Сбер",
+      asset: "RUB",
+      amount: 680000,
+      amountKind: "exact",
+      availability: "restricted",
+      rate: 6.5,
+      interestPaymentDay: 19,
       attentionPriority: "medium"
     });
   });

@@ -384,6 +384,18 @@ const FINANCIAL_ACTION_KEYWORDS = [
   "руб"
 ];
 
+const DRAFT_COMMAND_KEYWORDS = [
+  "добав",
+  "учти",
+  "запиши",
+  "зафикс",
+  "обнов",
+  "создай",
+  "создать",
+  "внеси",
+  "внести"
+];
+
 const hasAmountLikeValue = (text: string) =>
   /(?:^|[\s,.;:!?])\d[\d\s.,]*(?:[kк]|тыс|руб|р|₽|usdt|usd|amd|драм|btc|eth|%)?(?:$|[\s,.;:!?%])/u.test(
     text
@@ -404,6 +416,10 @@ const hasStorageRenameIntent = (text: string) =>
   /(?:переимен|поменяй\s+назван|измени\s+назван|назови)\S*/u.test(text) &&
   /\s+(?:в|на)\s+/u.test(text);
 
+const hasDraftCommandIntent = (text: string) =>
+  /^(?:долг|заказ|оплата|возврат)\b/u.test(text) ||
+  DRAFT_COMMAND_KEYWORDS.some((keyword) => text.includes(keyword));
+
 const shouldCreateDraftFromText = (text: string) => {
   const normalized = normalizeIntentText(text);
 
@@ -411,7 +427,7 @@ const shouldCreateDraftFromText = (text: string) => {
     return true;
   }
 
-  if (hasQuestionIntent(normalized)) {
+  if (hasQuestionIntent(normalized) && !hasDraftCommandIntent(normalized)) {
     return false;
   }
 

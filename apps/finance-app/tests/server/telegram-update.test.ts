@@ -198,6 +198,43 @@ describe("processTelegramUpdate", () => {
     expect(result).toEqual({ ok: true, handled: "text" });
   });
 
+  it("creates drafts for polite add requests even when they end with a question mark", async () => {
+    const dependencies = createDependencies();
+    dependencies.parseMessage.mockResolvedValue({
+      id: "draft-add-storage-question",
+      parsedActions: { summary: "Добавить ВТБ 280 000 RUB под 0%." }
+    });
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "можешь добавить что у меня 280к руб в втб под 0%?"
+        }
+      }
+    });
+
+    expect(dependencies.answerMessage).not.toHaveBeenCalled();
+    expect(dependencies.parseMessage).toHaveBeenCalledWith({
+      text: "можешь добавить что у меня 280к руб в втб под 0%?",
+      source: "telegram_text"
+    });
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Черновик: Добавить ВТБ 280 000 RUB под 0%.",
+      buttons: [
+        { text: "Сохранить", callbackData: "draft:draft-add-storage-question:confirm" },
+        { text: "Исправить", callbackData: "draft:draft-add-storage-question:edit" },
+        { text: "Отмена", callbackData: "draft:draft-add-storage-question:reject" }
+      ]
+    });
+    expect(result).toEqual({ ok: true, handled: "text" });
+  });
+
   it("asks for clarification instead of showing save for unclear drafts", async () => {
     const dependencies = createDependencies();
     dependencies.parseMessage.mockResolvedValue({

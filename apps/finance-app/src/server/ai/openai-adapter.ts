@@ -141,6 +141,8 @@ const hasTrustedPersonStorageIntent = (text: string) => {
 
   return [
     /(?:^|[\s,.;:!?])у\s+[a-zа-я0-9][^,.;:!?]{0,60}\s+у\s+меня\s+(?:есть|лежит|лежат|хранится|хранятся|находится|находятся)?(?:\s|$)/u,
+    /(?:^|[\s,.;:!?])у\s+[a-zа-я][^,.;:!?]{0,40}\s+\d[\d\s.,]*(?:k|к|тыс|руб|р|₽|usdt|usd|amd|драм|btc|eth)?(?:$|[\s,.;:!?])/u,
+    /(?:^|[\s,.;:!?])у\s+[a-zа-я][^,.;:!?]{0,40}\s+на\s+[a-zа-я][^,.;:!?]{0,40}\s+\d[\d\s.,]*(?:k|к|тыс|руб|р|₽|usdt|usd|amd|драм|btc|eth)?(?:$|[\s,.;:!?])/u,
     /\bмои\s+деньги\s+(?:у|на\s+(?:карте|счете|счету)\s+у)\s+/u,
     /\b(?:лежит|лежат|хранится|хранятся|находится|находятся)\s+у\s+[a-zа-я]/u,
     /\bна\s+(?:карте|счете|счету|банковском\s+счете)\s+у\s+[a-zа-я]/u
@@ -239,11 +241,17 @@ const normalizeAttentionPriority = (action: Record<string, unknown>) => {
   return "medium";
 };
 
-const normalizeCreateDebtAction = (action: Record<string, unknown>) => {
+const normalizeCreateDebtAction = (action: Record<string, unknown>, rawText: string) => {
   const debtType = normalizeDebtType(action);
+  const normalizedAction: Record<string, unknown> = {
+    ...action,
+    asset: inferAsset(action, rawText),
+    amount: parseLooseNumber(action.amount)
+  };
+  withOptionalLooseNumber(normalizedAction, "nextPaymentAmount", action.nextPaymentAmount);
 
   return {
-    ...action,
+    ...normalizedAction,
     debtType,
     basis: normalizeDebtBasis(action, debtType),
     status: normalizeDebtStatus(action),
@@ -255,6 +263,49 @@ const firstNonEmptyString = (...values: unknown[]) =>
   values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
 
 const CANONICAL_CASH_STORAGE_NAME = "Наличные";
+
+const parseLooseNumber = (value: unknown) => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : NaN;
+  }
+
+  if (typeof value !== "string") {
+    return NaN;
+  }
+
+  const normalized = value
+    .toLocaleLowerCase("ru-RU")
+    .replaceAll("ё", "е")
+    .replace(/\s+/g, "")
+    .replace(",", ".")
+    .trim();
+  const multiplier = /(?:k|к|тыс)$/u.test(normalized.replace(/[%₽р]+$/gu, ""));
+  const numericText = normalized.replace(/(?:k|к|тыс|%|₽|руб|р)+$/gu, "");
+  const amount = Number(numericText);
+
+  if (!Number.isFinite(amount)) {
+    return NaN;
+  }
+
+  return multiplier ? amount * 1000 : amount;
+};
+
+const withOptionalLooseNumber = (
+  target: Record<string, unknown>,
+  key: string,
+  value: unknown
+) => {
+  if (value === undefined) {
+    return target;
+  }
+
+  const parsed = parseLooseNumber(value);
+  if (Number.isFinite(parsed)) {
+    target[key] = parsed;
+  }
+
+  return target;
+};
 
 const inferAsset = (action: Record<string, unknown>, rawText: string) => {
   if (isOneOf(action.asset, VALID_ASSETS)) {
@@ -290,22 +341,26 @@ const normalizeStorageName = (
 };
 
 const normalizeStorageType = (action: Record<string, unknown>, rawText: string) => {
+  const values = getStringValues(action);
+  const text = normalizeIntentText(rawText);
+
+  if (hasAny(values, ["налич", "нал cash", "наличка"]) || text.includes("налич")) {
+    return "cash";
+  }
+
+  if (hasTrustedPersonStorageIntent(rawText) || typeof action.partyName === "string") {
+    return "trusted_person";
+  }
+
   if (isOneOf(action.storageType, VALID_STORAGE_TYPES)) {
     return action.storageType;
   }
 
-  const values = getStringValues(action);
-  if (hasTrustedPersonStorageIntent(rawText) || typeof action.partyName === "string") {
-    return "trusted_person";
-  }
   if (hasAny(values, ["bybit", "binance", "бирж"])) {
     return "crypto_exchange";
   }
   if (hasAny(values, ["metamask", "wallet", "кошелек", "кошел"])) {
     return "crypto_wallet";
-  }
-  if (hasAny(values, ["налич"])) {
-    return "cash";
   }
   if (hasAny(values, ["инвест", "брокер"])) {
     return "investment";
@@ -324,6 +379,10 @@ const normalizeStorageSubtype = (
   action: Record<string, unknown>,
   storageType: ReturnType<typeof normalizeStorageType>
 ) => {
+  if (storageType === "cash") {
+    return "not_applicable";
+  }
+
   if (isOneOf(action.subtype, VALID_STORAGE_SUBTYPES)) {
     return action.subtype;
   }
@@ -372,10 +431,25 @@ const normalizeCreateStorageAction = (action: Record<string, unknown>, rawText: 
   const name = normalizeStorageName(rawName, storageType);
   const holderContext =
     storageType === "cash" ? CANONICAL_CASH_STORAGE_NAME : rawHolderContext;
-  const amount = Number(action.amount);
+  const amount = parseLooseNumber(action.amount);
+  const normalizedAction: Record<string, unknown> = {
+    ...action
+  };
+  withOptionalLooseNumber(normalizedAction, "rate", action.rate);
+  withOptionalLooseNumber(
+    normalizedAction,
+    "interestPaymentDay",
+    action.interestPaymentDay
+  );
+  const comment =
+    typeof action.comment === "string" && action.comment.trim().length > 0
+      ? action.comment.trim()
+      : storageType === "trusted_person"
+        ? `Мои деньги находятся у этого человека; хранитель: ${holderContext}.`
+        : undefined;
 
   return {
-    ...action,
+    ...normalizedAction,
     name,
     storageType,
     subtype: normalizeStorageSubtype(action, storageType),
@@ -385,12 +459,7 @@ const normalizeCreateStorageAction = (action: Record<string, unknown>, rawText: 
     amountKind: isOneOf(action.amountKind, VALID_AMOUNT_KINDS) ? action.amountKind : "exact",
     availability: normalizeAvailability(action, storageType),
     attentionPriority: normalizeAttentionPriority(action),
-    comment:
-      typeof action.comment === "string" && action.comment.trim().length > 0
-        ? action.comment.trim()
-        : storageType === "trusted_person"
-          ? `Мои деньги находятся у этого человека; хранитель: ${holderContext}.`
-          : undefined
+    ...(comment !== undefined ? { comment } : {})
   };
 };
 
@@ -423,7 +492,7 @@ const normalizeUpdateStorageAction = (action: Record<string, unknown>) => {
 
 const toTrustedPersonStorageAction = (action: Record<string, unknown>) => {
   const partyName = typeof action.partyName === "string" ? action.partyName.trim() : "";
-  const amount = Number(action.amount);
+  const amount = parseLooseNumber(action.amount);
 
   if (
     partyName.length === 0 ||
@@ -496,6 +565,7 @@ const normalizeRecordDebtPaymentAction = (
   const normalizedAction: Record<string, unknown> = {
     ...action,
     asset: inferAsset(action, rawText),
+    amount: parseLooseNumber(action.amount),
     paymentDate
   };
 
@@ -511,13 +581,20 @@ const normalizeRecordDebtPaymentAction = (
   }
 
   const asset = isOneOf(normalizedAction.asset, VALID_ASSETS) ? normalizedAction.asset : "RUB";
-  const matchingDebts = context.knownDebts.filter(
+  const allMatchingDebts = context.knownDebts.filter(
+    (debt) => debt.asset === asset && matchesKnownDebtParty(debt.partyName, partyName)
+  );
+  const matchingDebts = allMatchingDebts.filter(
     (debt) =>
-      debt.asset === asset &&
-      !assignedDebtIds.has(debt.id) &&
-      matchesKnownDebtParty(debt.partyName, partyName)
+      !assignedDebtIds.has(debt.id)
   );
   const amount = Number(normalizedAction.amount);
+  if (!Number.isFinite(amount)) {
+    return {
+      clarification: `Не понял сумму оплаты для «${partyName}». Напиши сумму числом.`
+    };
+  }
+
   const exactAmountDebts = Number.isFinite(amount)
     ? matchingDebts.filter((debt) => debt.remainingAmount === amount)
     : [];
@@ -525,7 +602,9 @@ const normalizeRecordDebtPaymentAction = (
     ? matchingDebts.filter((debt) => amount <= debt.remainingAmount)
     : matchingDebts;
   const selectedDebt =
-    exactAmountDebts.length === 1
+    allMatchingDebts.length === 1
+      ? allMatchingDebts[0]
+      : exactAmountDebts.length === 1
       ? exactAmountDebts[0]
       : payableDebts.length === 1
         ? payableDebts[0]
@@ -592,7 +671,7 @@ function normalizeLooseParserJson(
         }
 
         if (action.type === "create_debt") {
-          return [normalizeCreateDebtAction(action)];
+          return [normalizeCreateDebtAction(action, rawText)];
         }
 
         if (action.type !== "record_debt_payment") {
