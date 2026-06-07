@@ -101,6 +101,64 @@ const callDraftMutationRoute = async (handler: DraftMutationRouteHandler, draftI
   };
 };
 
+const getUpdateChatId = (update: z.infer<typeof TelegramUpdateSchema>) => {
+  const chatId = update.message?.chat.id ?? update.callback_query?.message?.chat.id;
+
+  return typeof chatId === "number" ? chatId : null;
+};
+
+const getUpdateCallbackQueryId = (update: z.infer<typeof TelegramUpdateSchema>) =>
+  update.callback_query?.id ?? null;
+
+async function notifyTelegramProcessingFailure(input: {
+  update: z.infer<typeof TelegramUpdateSchema>;
+  fetcher: typeof fetch;
+  botToken: string;
+  userVisibleTelegramSendAttempted: boolean;
+  callbackAnswerAttempted: boolean;
+  sendTelegramMessage: Awaited<ReturnType<typeof getRouteDependencies>>["sendTelegramMessage"];
+  answerTelegramCallbackQuery: Awaited<
+    ReturnType<typeof getRouteDependencies>
+  >["answerTelegramCallbackQuery"];
+}) {
+  const callbackQueryId = getUpdateCallbackQueryId(input.update);
+  if (callbackQueryId && !input.callbackAnswerAttempted) {
+    try {
+      await input.answerTelegramCallbackQuery({
+        fetcher: input.fetcher,
+        botToken: input.botToken,
+        callbackQueryId,
+        text: "Не получилось"
+      });
+    } catch (error) {
+      console.warn("Telegram callback failure notification failed:", error);
+    }
+  }
+
+  if (input.userVisibleTelegramSendAttempted) {
+    return;
+  }
+
+  const chatId = getUpdateChatId(input.update);
+  if (chatId === null) {
+    return;
+  }
+
+  try {
+    await input.sendTelegramMessage({
+      fetcher: input.fetcher,
+      botToken: input.botToken,
+      chatId,
+      text: callbackQueryId
+        ? "Не получилось обработать кнопку. Попробуй нажать еще раз."
+        : "Не получилось обработать сообщение. Я уже вижу сбой, попробуй отправить еще раз или чуть проще.",
+      buttons: []
+    });
+  } catch (error) {
+    console.warn("Telegram message failure notification failed:", error);
+  }
+}
+
 export async function POST(request: Request) {
   const webhookSecretFailure = validateWebhookSecret(request);
   if (webhookSecretFailure) {
@@ -134,8 +192,15 @@ export async function POST(request: Request) {
     transcribeAudioFile
   } = await getRouteDependencies();
   let result: unknown;
+  let userVisibleTelegramSendAttempted = false;
+  let callbackAnswerAttempted = false;
   const sendUserVisibleTelegramMessage: typeof sendTelegramMessage = async (input) => {
+    userVisibleTelegramSendAttempted = true;
     await sendTelegramMessage(input);
+  };
+  const answerUserVisibleTelegramCallback: typeof answerTelegramCallbackQuery = async (input) => {
+    callbackAnswerAttempted = true;
+    await answerTelegramCallbackQuery(input);
   };
 
   try {
@@ -157,13 +222,22 @@ export async function POST(request: Request) {
       clearConversationState: (telegramUserId) =>
         clearTelegramConversationState(prisma, telegramUserId),
       sendTelegramMessage: sendUserVisibleTelegramMessage,
-      answerTelegramCallbackQuery,
+      answerTelegramCallbackQuery: answerUserVisibleTelegramCallback,
       downloadTelegramVoiceFile,
       transcribeAudioFile: (client, input) => transcribeAudioFile(client, input),
       getOpenAiClient: () => getOpenAiClient() as unknown as OpenAiTranscriptionClient
     });
   } catch (error) {
     console.warn("Telegram update processing failed:", error);
+    await notifyTelegramProcessingFailure({
+      update,
+      fetcher: fetch,
+      botToken,
+      userVisibleTelegramSendAttempted,
+      callbackAnswerAttempted,
+      sendTelegramMessage,
+      answerTelegramCallbackQuery
+    });
 
     return NextResponse.json({ ok: false, error: "Telegram update processing failed" });
   }

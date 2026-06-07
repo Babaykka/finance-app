@@ -114,7 +114,7 @@ describe("telegram webhook route", () => {
   const originalTranscribeModel = process.env.OPENAI_TRANSCRIBE_MODEL;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     process.env.TELEGRAM_BOT_TOKEN = "token";
     process.env.TELEGRAM_ALLOWED_USER_ID = "123";
     process.env.TELEGRAM_WEBHOOK_SECRET = "secret";
@@ -238,7 +238,7 @@ describe("telegram webhook route", () => {
     await expect(response.json()).resolves.toEqual({ ok: true, handled: "text" });
   });
 
-  it("does not send a generic Telegram fallback when text processing fails", async () => {
+  it("sends a visible Telegram fallback when text processing fails before any reply", async () => {
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
     mocks.createDraftFromParsedMessage.mockRejectedValue(new Error("parse failed"));
@@ -255,7 +255,85 @@ describe("telegram webhook route", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Не получилось обработать сообщение. Я уже вижу сбой, попробуй отправить еще раз или чуть проще.",
+      buttons: []
+    });
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Telegram update processing failed"
+    });
+  });
+
+  it("sends a visible fallback when a draft correction fails", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    mocks.getTelegramConversationState.mockResolvedValue({
+      kind: "awaiting_draft_correction",
+      payload: { draftId: "draft-old" }
+    });
+    mocks.createDraftFromCorrectedMessage.mockRejectedValue(new Error("correction failed"));
+
+    const response = await POST(
+      telegramWebhookRequest({
+        message: {
+          chat: { id: 456, type: "private" },
+          from: { id: 123 },
+          text: "сумма 100000"
+        }
+      })
+    );
+
+    expect(mocks.createDraftFromCorrectedMessage).toHaveBeenCalledWith({
+      draftId: "draft-old",
+      text: "сумма 100000",
+      source: "telegram_text"
+    });
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Не получилось обработать сообщение. Я уже вижу сбой, попробуй отправить еще раз или чуть проще.",
+      buttons: []
+    });
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Telegram update processing failed"
+    });
+  });
+
+  it("answers callback queries and sends a fallback when edit-state storage fails", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    mocks.setTelegramConversationState.mockRejectedValue(new Error("state failed"));
+
+    const response = await POST(
+      telegramWebhookRequest({
+        callback_query: {
+          id: "callback-edit",
+          from: { id: 123 },
+          message: { chat: { id: 456 } },
+          data: "draft:draft-1:edit"
+        }
+      })
+    );
+
+    expect(mocks.answerTelegramCallbackQuery).toHaveBeenCalledWith({
+      fetcher,
+      botToken: "token",
+      callbackQueryId: "callback-edit",
+      text: "Не получилось"
+    });
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Не получилось обработать кнопку. Попробуй нажать еще раз.",
+      buttons: []
+    });
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: "Telegram update processing failed"
