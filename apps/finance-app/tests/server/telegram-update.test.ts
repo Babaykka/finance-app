@@ -198,6 +198,41 @@ describe("processTelegramUpdate", () => {
     expect(result).toEqual({ ok: true, handled: "text" });
   });
 
+  it("asks for clarification instead of showing save for unclear drafts", async () => {
+    const dependencies = createDependencies();
+    dependencies.parseMessage.mockResolvedValue({
+      id: "draft-needs-clarification",
+      parsedActions: {
+        summary: "Записать оплату долга.",
+        actions: [],
+        needsClarification: ["Уточнить, к какому долгу относится оплата."]
+      }
+    });
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        message: {
+          chat: { id: 456 },
+          from: { id: 123 },
+          text: "Вероника оплатила 18000"
+        }
+      }
+    });
+
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Черновик: Записать оплату долга.\n\nНужно уточнить: Уточнить, к какому долгу относится оплата.",
+      buttons: [
+        { text: "Исправить", callbackData: "draft:draft-needs-clarification:edit" },
+        { text: "Отмена", callbackData: "draft:draft-needs-clarification:reject" }
+      ]
+    });
+    expect(result).toEqual({ ok: true, handled: "text" });
+  });
+
   it("creates storage rename drafts directly without calling the AI parser", async () => {
     const dependencies = createDependencies();
     dependencies.createDraftFromParseResult.mockResolvedValue({
@@ -417,8 +452,84 @@ describe("processTelegramUpdate", () => {
     });
   });
 
+  it("sends the route validation message when a draft cannot be confirmed", async () => {
+    const dependencies = createDependencies();
+    dependencies.confirmDraft.mockResolvedValue({
+      ok: false,
+      status: 422,
+      body: {
+        message:
+          "Этот черновик сначала нужно уточнить. Нажми «Исправить» и напиши недостающие данные."
+      }
+    });
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        callback_query: {
+          id: "callback-1",
+          from: { id: 123 },
+          message: { chat: { id: 456 } },
+          data: "draft:draft-1:confirm"
+        }
+      }
+    });
+
+    expect(dependencies.confirmDraft).toHaveBeenCalledWith("draft-1");
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Этот черновик сначала нужно уточнить. Нажми «Исправить» и напиши недостающие данные.",
+      buttons: []
+    });
+    expect(result).toEqual({
+      ok: true,
+      handled: "callback",
+      callbackAction: "confirm",
+      draftId: "draft-1",
+      errorStatus: 422
+    });
+  });
+
   it("stores edit state when the user taps the edit draft button", async () => {
     const dependencies = createDependencies();
+
+    const result = await processTelegramUpdate({
+      ...dependencies,
+      update: {
+        callback_query: {
+          id: "callback-edit",
+          from: { id: 123 },
+          message: { chat: { id: 456 } },
+          data: "draft:draft-1:edit"
+        }
+      }
+    });
+
+    expect(dependencies.setConversationState).toHaveBeenCalledWith({
+      telegramUserId: "123",
+      kind: "awaiting_draft_correction",
+      payload: { draftId: "draft-1" }
+    });
+    expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith({
+      fetcher: dependencies.fetcher,
+      botToken: "token",
+      chatId: 456,
+      text: "Напиши исправление следующим сообщением. Можно коротко: «сумма 100000», «это не долг, а мои деньги у человека», или полную новую формулировку.",
+      buttons: []
+    });
+    expect(result).toEqual({
+      ok: true,
+      handled: "callback",
+      callbackAction: "edit",
+      draftId: "draft-1"
+    });
+  });
+
+  it("continues the edit flow when Telegram callback answering fails", async () => {
+    const dependencies = createDependencies();
+    dependencies.answerTelegramCallbackQuery.mockRejectedValue(new Error("callback expired"));
 
     const result = await processTelegramUpdate({
       ...dependencies,

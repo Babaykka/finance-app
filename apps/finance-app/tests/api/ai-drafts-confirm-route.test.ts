@@ -125,6 +125,73 @@ describe("ai-drafts confirm route", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("returns 422 when the draft still needs clarification", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+    findFirstOrThrow.mockResolvedValue({
+      id: "draft-clarify",
+      ownerId: "owner-1",
+      source: "telegram_text",
+      parsedActions: {
+        confidence: 0.61,
+        summary: "Записать оплату долга.",
+        actions: [],
+        needsClarification: ["Уточнить, к какому долгу относится оплата."]
+      }
+    });
+
+    const { POST } = await import("@/app/api/ai-drafts/[id]/confirm/route");
+    const response = await POST(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "draft-clarify" })
+    });
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({
+      error: "Draft cannot be confirmed.",
+      message:
+        "Этот черновик сначала нужно уточнить. Нажми «Исправить» и напиши недостающие данные: Уточнить, к какому долгу относится оплата."
+    });
+    expect(applyAiActions).not.toHaveBeenCalled();
+  });
+
+  it("returns 422 when a debt payment draft is not disambiguated", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+    findFirstOrThrow.mockResolvedValue({
+      id: "draft-payment",
+      ownerId: "owner-1",
+      source: "telegram_text",
+      parsedActions: {
+        confidence: 0.85,
+        summary: "Записать оплату долга.",
+        actions: [
+          {
+            type: "record_debt_payment",
+            partyName: "Вероника",
+            amount: 18000,
+            asset: "RUB",
+            paymentDate: "2026-06-07"
+          }
+        ],
+        needsClarification: []
+      }
+    });
+    applyAiActions.mockRejectedValue(
+      new Error("record_debt_payment requires debtId; disambiguate the debt before confirmation")
+    );
+
+    const { POST } = await import("@/app/api/ai-drafts/[id]/confirm/route");
+    const response = await POST(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "draft-payment" })
+    });
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({
+      error: "Draft cannot be confirmed.",
+      message:
+        "Этот платеж нужно уточнить перед сохранением. Нажми «Исправить» и укажи, к какому долгу относится оплата."
+    });
+    expect(applyAiActions).toHaveBeenCalledOnce();
+  });
+
   it("leaves the claim rolled back when action application fails", async () => {
     updateMany.mockResolvedValue({ count: 1 });
     findFirstOrThrow.mockResolvedValue({

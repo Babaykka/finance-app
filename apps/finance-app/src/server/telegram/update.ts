@@ -150,8 +150,13 @@ const HELP_TEXT = [
   "И можно просто поговорить."
 ].join("\n");
 
-const buildDraftButtons = (draftId: string): TelegramInlineButton[] => [
-  { text: "Сохранить", callbackData: `draft:${draftId}:confirm` },
+const buildDraftButtons = (
+  draftId: string,
+  options: { canConfirm?: boolean } = {}
+): TelegramInlineButton[] => [
+  ...(options.canConfirm === false
+    ? []
+    : [{ text: "Сохранить", callbackData: `draft:${draftId}:confirm` }]),
   { text: "Исправить", callbackData: `draft:${draftId}:edit` },
   { text: "Отмена", callbackData: `draft:${draftId}:reject` }
 ];
@@ -170,10 +175,40 @@ const getDraftSummary = (parsedActions: unknown) => {
   return "проверь действие перед сохранением";
 };
 
+const getDraftNeedsClarification = (parsedActions: unknown) => {
+  if (
+    typeof parsedActions !== "object" ||
+    parsedActions === null ||
+    !("needsClarification" in parsedActions) ||
+    !Array.isArray(parsedActions.needsClarification)
+  ) {
+    return [];
+  }
+
+  return parsedActions.needsClarification.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0
+  );
+};
+
+const hasExplicitEmptyActions = (parsedActions: unknown) =>
+  typeof parsedActions === "object" &&
+  parsedActions !== null &&
+  "actions" in parsedActions &&
+  Array.isArray(parsedActions.actions) &&
+  parsedActions.actions.length === 0;
+
 function buildTelegramDraftConfirmation(draft: DraftResult) {
+  const needsClarification = getDraftNeedsClarification(draft.parsedActions);
+  const canConfirm =
+    needsClarification.length === 0 && !hasExplicitEmptyActions(draft.parsedActions);
+  const clarificationText =
+    needsClarification.length > 0
+      ? `\n\nНужно уточнить: ${needsClarification.join(" ")}`
+      : "";
+
   return {
-    text: `Черновик: ${getDraftSummary(draft.parsedActions)}`,
-    buttons: buildDraftButtons(draft.id)
+    text: `Черновик: ${getDraftSummary(draft.parsedActions)}${clarificationText}`,
+    buttons: buildDraftButtons(draft.id, { canConfirm })
   };
 }
 
@@ -609,12 +644,7 @@ async function notifyDraftMutationFailure(
   callback: TelegramCallbackQuery,
   text: string
 ) {
-  await input.answerTelegramCallbackQuery({
-    fetcher: input.fetcher,
-    botToken: input.botToken,
-    callbackQueryId: callback.id,
-    text
-  });
+  await answerCallbackQuietly(input, callback, text);
 
   const target = callbackMessageTarget(callback);
   if (target) {
@@ -628,6 +658,43 @@ async function notifyDraftMutationFailure(
   }
 }
 
+const getDraftMutationFailureMessage = (mutation: DraftMutationResult) => {
+  if (mutation.status === 404) {
+    return "Черновик уже обработан или не найден";
+  }
+
+  if (
+    typeof mutation.body === "object" &&
+    mutation.body !== null &&
+    "message" in mutation.body &&
+    typeof mutation.body.message === "string" &&
+    mutation.body.message.trim().length > 0
+  ) {
+    return mutation.body.message;
+  }
+
+  return "Не получилось обработать черновик";
+};
+
+async function answerCallbackQuietly(
+  input: ProcessTelegramUpdateInput,
+  callback: TelegramCallbackQuery,
+  text: string
+) {
+  try {
+    await input.answerTelegramCallbackQuery({
+      fetcher: input.fetcher,
+      botToken: input.botToken,
+      callbackQueryId: callback.id,
+      text
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV !== "test") {
+      console.warn("Telegram callback answer failed", { callbackQueryId: callback.id, error });
+    }
+  }
+}
+
 async function processCallbackQuery(
   input: ProcessTelegramUpdateInput,
   callback: TelegramCallbackQuery
@@ -635,12 +702,7 @@ async function processCallbackQuery(
   const callbackData = parseDraftCallbackData(callback.data);
 
   if (!callbackData) {
-    await input.answerTelegramCallbackQuery({
-      fetcher: input.fetcher,
-      botToken: input.botToken,
-      callbackQueryId: callback.id,
-      text: "Не понял кнопку"
-    });
+    await answerCallbackQuietly(input, callback, "Не понял кнопку");
 
     return { ok: true, ignored: true };
   }
@@ -652,12 +714,7 @@ async function processCallbackQuery(
       payload: { draftId: callbackData.draftId }
     });
 
-    await input.answerTelegramCallbackQuery({
-      fetcher: input.fetcher,
-      botToken: input.botToken,
-      callbackQueryId: callback.id,
-      text: "Ок"
-    });
+    await answerCallbackQuietly(input, callback, "Ок");
 
     const target = callbackMessageTarget(callback);
     if (target) {
@@ -684,13 +741,7 @@ async function processCallbackQuery(
       : await input.rejectDraft(callbackData.draftId);
 
   if (!mutation.ok) {
-    await notifyDraftMutationFailure(
-      input,
-      callback,
-      mutation.status === 404
-        ? "Черновик уже обработан или не найден"
-        : "Не получилось обработать черновик"
-    );
+    await notifyDraftMutationFailure(input, callback, getDraftMutationFailureMessage(mutation));
 
     return {
       ok: true,
@@ -707,12 +758,7 @@ async function processCallbackQuery(
       ? "Сохранено. Черновик применен к финансам."
       : "Ок, черновик отменен.";
 
-  await input.answerTelegramCallbackQuery({
-    fetcher: input.fetcher,
-    botToken: input.botToken,
-    callbackQueryId: callback.id,
-    text: answerText
-  });
+  await answerCallbackQuietly(input, callback, answerText);
 
   const target = callbackMessageTarget(callback);
   if (target) {
