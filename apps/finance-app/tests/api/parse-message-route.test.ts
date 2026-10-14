@@ -76,7 +76,7 @@ describe("parse-message route request schema", () => {
   it("accepts telegram_text requests", () => {
     expect(
       ParseMessageRequestSchema.parse({
-        text: "Геворг вернул 10000",
+        text: "Контрагент Эпсилон вернул 10000",
         source: "telegram_text"
       }).source
     ).toBe("telegram_text");
@@ -85,14 +85,14 @@ describe("parse-message route request schema", () => {
   it("accepts telegram_voice requests with a transcript", () => {
     expect(
       ParseMessageRequestSchema.parse({
-        text: "Геворг вернул 10000",
+        text: "Контрагент Эпсилон вернул 10000",
         source: "telegram_voice",
-        transcript: "Геворг вернул 10000"
+        transcript: "Контрагент Эпсилон вернул 10000"
       })
     ).toEqual({
-      text: "Геворг вернул 10000",
+      text: "Контрагент Эпсилон вернул 10000",
       source: "telegram_voice",
-      transcript: "Геворг вернул 10000"
+      transcript: "Контрагент Эпсилон вернул 10000"
     });
   });
 
@@ -121,7 +121,7 @@ describe("parse-message route request schema", () => {
       actions: [
         {
           type: "record_debt_payment",
-          partyName: "Геворг",
+          partyName: "Контрагент Эпсилон",
           amount: 10000,
           asset: "RUB",
           paidAt: "2026-06-04",
@@ -138,7 +138,7 @@ describe("parse-message route request schema", () => {
     mocks.debtFindMany.mockResolvedValue([
       {
         id: "debt-1",
-        partyName: "Геворг",
+        partyName: "Контрагент Эпсилон",
         remainingAmount: decimalLike("50000"),
         asset: "RUB"
       }
@@ -146,7 +146,7 @@ describe("parse-message route request schema", () => {
     mocks.storagePlaceFindMany.mockResolvedValue([
       {
         id: "storage-1",
-        name: "Альфабанк Вероники",
+        name: "Альфабанк резервный",
         asset: "RUB",
         amount: decimalLike("804000.75")
       }
@@ -158,7 +158,7 @@ describe("parse-message route request schema", () => {
       new Request("http://localhost/api/parse-message", {
         method: "POST",
         body: JSON.stringify({
-          text: "Геворг вернул часть долга, сумму не написал",
+          text: "Контрагент Эпсилон вернул часть долга, сумму не написал",
           source: "web_form"
         })
       })
@@ -187,14 +187,14 @@ describe("parse-message route request schema", () => {
     expect(mocks.getOpenAiClient).toHaveBeenCalledOnce();
     expect(mocks.createOpenAiParser).toHaveBeenCalledWith(mocks.openAiClient, "gpt-route-test");
     expect(mocks.parseMessage).toHaveBeenCalledWith({
-      text: "Геворг вернул часть долга, сумму не написал",
+      text: "Контрагент Эпсилон вернул часть долга, сумму не написал",
       context: {
         todayIso: "2026-06-04",
         timezone: "Europe/Moscow",
         knownDebts: [
           {
             id: "debt-1",
-            partyName: "Геворг",
+            partyName: "Контрагент Эпсилон",
             remainingAmount: 50000,
             asset: "RUB"
           }
@@ -202,7 +202,7 @@ describe("parse-message route request schema", () => {
         knownStoragePlaces: [
           {
             id: "storage-1",
-            name: "Альфабанк Вероники",
+            name: "Альфабанк резервный",
             asset: "RUB",
             amount: 804000.75
           }
@@ -212,7 +212,7 @@ describe("parse-message route request schema", () => {
     expect(mocks.createAiDraft).toHaveBeenCalledWith(mocks.prisma, {
       ownerId: "owner-1",
       source: "web",
-      rawText: "Геворг вернул часть долга, сумму не написал",
+      rawText: "Контрагент Эпсилон вернул часть долга, сумму не написал",
       transcript: undefined,
       parseResult
     });
@@ -239,7 +239,7 @@ describe("parse-message route request schema", () => {
       new Request("http://localhost/api/parse-message", {
         method: "POST",
         body: JSON.stringify({
-          text: "Геворг должен вернуть деньги, но сумму я уточню позже",
+          text: "Контрагент Эпсилон должен вернуть деньги, но сумму я уточню позже",
           source: "telegram_text"
         })
       })

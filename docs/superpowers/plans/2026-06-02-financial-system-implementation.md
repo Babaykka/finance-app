@@ -6,7 +6,7 @@
 
 **Architecture:** The implementation uses a Python schema as the source of truth, an `openpyxl` workbook generator for the Google Sheets-importable template, local `unittest` coverage for schema/workbook/script checks, and a standalone Apps Script file for Google Sheets menus and maintenance actions. The generated `.xlsx` is imported into Google Sheets; the Apps Script file is then pasted or deployed into the Google Sheet script editor.
 
-**Tech Stack:** Python 3.12 via `/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3`, `openpyxl 3.1.5`, standard-library `unittest`, Google Sheets, Google Apps Script.
+**Tech Stack:** Python 3.12 via `/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3`, `openpyxl 3.1.5`, standard-library `unittest`, Google Sheets, Google Apps Script.
 
 ---
 
@@ -110,7 +110,7 @@ if __name__ == "__main__":
 Run:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_schema.py
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_schema.py
 ```
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'finance_system.schema'`.
@@ -313,7 +313,7 @@ def sheet_by_name(name: str) -> SheetSpec:
 Run:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_schema.py
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_schema.py
 ```
 
 Expected: `OK`.
@@ -425,7 +425,7 @@ if __name__ == "__main__":
 Run:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_workbook.py
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_workbook.py
 ```
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'finance_system.workbook'`.
@@ -603,7 +603,7 @@ if __name__ == "__main__":
 Run:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_workbook.py
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_workbook.py
 ```
 
 Expected: `OK`.
@@ -613,7 +613,7 @@ Expected: `OK`.
 Run:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m finance_system.workbook --output dist/finance-system-template.xlsx
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m finance_system.workbook --output dist/finance-system-template.xlsx
 ```
 
 Expected output:
@@ -680,7 +680,7 @@ if __name__ == "__main__":
 Run:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_apps_script.py
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_apps_script.py
 ```
 
 Expected: FAIL with `FileNotFoundError` for `apps-script/FinanceSystem.gs`.
@@ -780,7 +780,7 @@ function refreshAttention() {
 Run:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_apps_script.py
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests/test_apps_script.py
 ```
 
 Expected: `OK`.
@@ -835,7 +835,7 @@ Create `docs/finance-system-user-guide.md`:
 В терминале из корня проекта выполните:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m finance_system.workbook --output dist/finance-system-template.xlsx
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m finance_system.workbook --output dist/finance-system-template.xlsx
 ```
 
 После этого импортируйте `dist/finance-system-template.xlsx` в Google Sheets.
@@ -898,7 +898,7 @@ Create `docs/finance-system-user-guide.md`:
 Run:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest discover -s tests
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest discover -s tests
 ```
 
 Expected: `OK`.
@@ -908,7 +908,7 @@ Expected: `OK`.
 Run:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m finance_system.workbook --output dist/finance-system-template.xlsx
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m finance_system.workbook --output dist/finance-system-template.xlsx
 ```
 
 Expected output:

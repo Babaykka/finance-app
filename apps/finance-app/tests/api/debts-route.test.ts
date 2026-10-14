@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { CreateDebtApiSchema } from "@/app/api/debts/route";
 
 describe("debts route schema", () => {
-  it("accepts a Геворг personal debt payload", () => {
+  it("accepts a Контрагент Эпсилон personal debt payload", () => {
     const payload = {
-      partyName: "Геворг",
+      partyName: "Контрагент Эпсилон",
       type: "personal_debt",
       basis: "личный долг",
       asset: "RUB",
@@ -13,7 +13,7 @@ describe("debts route schema", () => {
       nextPaymentAmount: 10000,
       nextPaymentDate: "2026-06-10T00:00:00.000Z",
       attentionPriority: "high",
-      comment: "Геворг вернет долг частями."
+      comment: "Контрагент Эпсилон вернет долг частями."
     };
 
     expect(CreateDebtApiSchema.parse(payload)).toEqual(payload);

@@ -50,10 +50,10 @@ describe("ai-drafts confirm route", () => {
       actions: [
         {
           type: "create_storage_place",
-          name: "Альфабанк Вероники",
+          name: "Альфабанк резервный",
           storageType: "trusted_person",
           subtype: "not_applicable",
-          holderContext: "Вероника",
+          holderContext: "Другой владелец",
           asset: "RUB",
           amount: 804000,
           amountKind: "exact",
@@ -165,7 +165,7 @@ describe("ai-drafts confirm route", () => {
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Вероника",
+            partyName: "Другой владелец",
             amount: 18000,
             asset: "RUB",
             paymentDate: "2026-06-07"
@@ -204,10 +204,10 @@ describe("ai-drafts confirm route", () => {
         actions: [
           {
             type: "create_storage_place",
-            name: "Альфабанк Вероники",
+            name: "Альфабанк резервный",
             storageType: "trusted_person",
             subtype: "not_applicable",
-            holderContext: "Вероника",
+            holderContext: "Другой владелец",
             asset: "RUB",
             amount: 804000,
             amountKind: "exact",

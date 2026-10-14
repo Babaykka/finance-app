@@ -252,7 +252,7 @@ describe("processTelegramUpdate", () => {
         message: {
           chat: { id: 456 },
           from: { id: 123 },
-          text: "Вероника оплатила 18000"
+          text: "Другой владелец оплатила 18000"
         }
       }
     });
@@ -696,7 +696,7 @@ describe("processTelegramUpdate", () => {
         message: {
           chat: { id: 456 },
           from: { id: 999 },
-          text: "Геворг должен 50000"
+          text: "Контрагент Эпсилон должен 50000"
         }
       }
     });

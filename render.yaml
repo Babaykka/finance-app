@@ -23,7 +23,7 @@ services:
       - key: DATABASE_URL
         value: file:/var/data/finance.db
       - key: OWNER_DISPLAY_NAME
-        value: Hrach
+        value: Owner
       - key: OWNER_TELEGRAM_USER_ID
         sync: false
       - key: TELEGRAM_ALLOWED_USER_ID

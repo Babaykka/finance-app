@@ -7,20 +7,20 @@ const context: AiParserContext = {
   timezone: "Europe/Moscow",
   knownDebts: [
     {
-      id: "debt-stepan",
-      partyName: "Степан Гаврилюк",
+      id: "debt-counterparty-alpha",
+      partyName: "Контрагент Альфа",
       remainingAmount: 25000,
       asset: "RUB"
     },
     {
-      id: "debt-veronika-5000",
-      partyName: "Вероника",
+      id: "debt-holder-other-5000",
+      partyName: "Другой владелец",
       remainingAmount: 5000,
       asset: "RUB"
     },
     {
-      id: "debt-veronika-13000",
-      partyName: "Вероника",
+      id: "debt-holder-other-13000",
+      partyName: "Другой владелец",
       remainingAmount: 13000,
       asset: "RUB"
     }
@@ -91,18 +91,18 @@ describe("local finance parser", () => {
 
   it("records a payment against a single matching known debt", () => {
     const result = parseLocalFinanceMessage({
-      text: "Степан Гаврилюк оплатил 25000 рублей",
+      text: "Контрагент Альфа оплатил 25000 рублей",
       context
     });
 
     expect(result).toEqual({
       confidence: 0.95,
-      summary: "Записать оплату долга: Степан Гаврилюк, 25000 RUB.",
+      summary: "Записать оплату долга: Контрагент Альфа, 25000 RUB.",
       actions: [
         {
           type: "record_debt_payment",
-          partyName: "Степан Гаврилюк",
-          debtId: "debt-stepan",
+          partyName: "Контрагент Альфа",
+          debtId: "debt-counterparty-alpha",
           amount: 25000,
           asset: "RUB",
           paymentDate: "2026-06-07"
@@ -114,23 +114,23 @@ describe("local finance parser", () => {
 
   it("splits several payments across exact matching debts", () => {
     const result = parseLocalFinanceMessage({
-      text: "Вероника оплатила долг 5000 рублей и 13000 рублей",
+      text: "Другой владелец оплатила долг 5000 рублей и 13000 рублей",
       context
     });
 
     expect(result?.actions).toEqual([
       {
         type: "record_debt_payment",
-        partyName: "Вероника",
-        debtId: "debt-veronika-5000",
+        partyName: "Другой владелец",
+        debtId: "debt-holder-other-5000",
         amount: 5000,
         asset: "RUB",
         paymentDate: "2026-06-07"
       },
       {
         type: "record_debt_payment",
-        partyName: "Вероника",
-        debtId: "debt-veronika-13000",
+        partyName: "Другой владелец",
+        debtId: "debt-holder-other-13000",
         amount: 13000,
         asset: "RUB",
         paymentDate: "2026-06-07"
@@ -141,55 +141,55 @@ describe("local finance parser", () => {
 
   it("treats money kept by a person as storage, not debt", () => {
     const result = parseLocalFinanceMessage({
-      text: "у Абела у меня есть 100к рублей",
+      text: "у Контрагента Дельта у меня есть 100к рублей",
       context
     });
 
     expect(result?.actions[0]).toEqual({
       type: "create_storage_place",
-      name: "Абела",
+      name: "Контрагента Дельта",
       storageType: "trusted_person",
       subtype: "not_applicable",
-      holderContext: "Абела",
+      holderContext: "Контрагента Дельта",
       asset: "RUB",
       amount: 100000,
       amountKind: "exact",
       availability: "restricted",
       attentionPriority: "medium",
-      comment: "Мои деньги находятся у этого человека; хранитель: Абела."
+      comment: "Мои деньги находятся у этого человека; хранитель: Контрагента Дельта."
     });
   });
 
   it("treats money on another person's bank account as trusted-person storage", () => {
     const result = parseLocalFinanceMessage({
-      text: "на альфабанк вероники 804000 руб",
+      text: "на альфабанк другого владельца 804000 руб",
       context
     });
 
     expect(result?.actions[0]).toEqual({
       type: "create_storage_place",
-      name: "Альфабанк Вероники",
+      name: "Альфабанк Другого Владельца",
       storageType: "trusted_person",
       subtype: "not_applicable",
-      holderContext: "Вероники",
+      holderContext: "Другого Владельца",
       asset: "RUB",
       amount: 804000,
       amountKind: "exact",
       availability: "restricted",
       attentionPriority: "medium",
-      comment: "Мои деньги находятся у этого человека; хранитель: Вероники."
+      comment: "Мои деньги находятся у этого человека; хранитель: Другого Владельца."
     });
   });
 
   it("creates a personal debt with a Russian due date", () => {
     const result = parseLocalFinanceMessage({
-      text: "тарон друг должен оплатить 2000 руб до 12 июня",
+      text: "контрагент зета друг должен оплатить 2000 руб до 12 июня",
       context
     });
 
     expect(result?.actions[0]).toEqual({
       type: "create_debt",
-      partyName: "Тарон",
+      partyName: "Контрагент Зета",
       debtType: "personal_debt",
       basis: "личный долг",
       asset: "RUB",
@@ -204,7 +204,7 @@ describe("local finance parser", () => {
   it("returns null for ambiguous finance-like text", () => {
     expect(
       parseLocalFinanceMessage({
-        text: "Вероника что-то там по долгам, разберемся позже",
+        text: "Другой владелец что-то там по долгам, разберемся позже",
         context
       })
     ).toBeNull();

@@ -682,7 +682,7 @@ Create `apps/finance-app/.env.example`:
 ```env
 DATABASE_URL="file:./dev.db"
 OWNER_TELEGRAM_USER_ID="123456789"
-OWNER_DISPLAY_NAME="Hrach"
+OWNER_DISPLAY_NAME="Owner"
 TELEGRAM_BOT_TOKEN=""
 OPENAI_API_KEY=""
 APP_BASE_URL="http://localhost:3000"
@@ -743,21 +743,21 @@ describe("ensureOwner", () => {
         create: vi.fn().mockResolvedValue({
           id: "owner-1",
           telegramUserId: "123",
-          displayName: "Hrach"
+          displayName: "Owner"
         })
       }
     };
 
     const owner = await ensureOwner(db as never, {
       telegramUserId: "123",
-      displayName: "Hrach"
+      displayName: "Owner"
     });
 
     expect(owner.id).toBe("owner-1");
     expect(db.owner.create).toHaveBeenCalledWith({
       data: {
         telegramUserId: "123",
-        displayName: "Hrach"
+        displayName: "Owner"
       }
     });
   });
@@ -974,10 +974,10 @@ import { describe, expect, it, vi } from "vitest";
 import { createStoragePlace } from "@/server/services/storage-service";
 
 describe("createStoragePlace", () => {
-  it("creates Альфабанк Вероники as trusted-person RUB storage with audit", async () => {
+  it("creates Альфабанк резервный as trusted-person RUB storage with audit", async () => {
     const db = {
       storagePlace: {
-        create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Альфабанк Вероники" })
+        create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Альфабанк резервный" })
       },
       auditLog: {
         create: vi.fn().mockResolvedValue({ id: "audit-1" })
@@ -988,17 +988,17 @@ describe("createStoragePlace", () => {
       ownerId: "owner-1",
       actor: "telegram:123",
       source: "telegram_text",
-      name: "Альфабанк Вероники",
+      name: "Альфабанк резервный",
       type: "trusted_person",
       subtype: "not_applicable",
-      holderContext: "Вероника",
+      holderContext: "Другой владелец",
       asset: "RUB",
       amount: 804000,
       amountKind: "exact",
       availability: "restricted",
       status: "check",
       attentionPriority: "high",
-      comment: "Мои деньги на Альфабанк Вероники."
+      comment: "Мои деньги на Альфабанк резервный."
     });
 
     expect(result.id).toBe("storage-1");
@@ -1083,7 +1083,7 @@ describe("debt service", () => {
   it("creates work receivable with a planned payment", async () => {
     const db = {
       debt: {
-        create: vi.fn().mockResolvedValue({ id: "debt-1", partyName: "Степан Гаврилюк" }),
+        create: vi.fn().mockResolvedValue({ id: "debt-1", partyName: "Контрагент Альфа" }),
         update: vi.fn()
       },
       debtPayment: {
@@ -1098,7 +1098,7 @@ describe("debt service", () => {
       ownerId: "owner-1",
       actor: "telegram:123",
       source: "telegram_text",
-      partyName: "Степан Гаврилюк",
+      partyName: "Контрагент Альфа",
       type: "work_receivable",
       basis: "дипломная работа",
       asset: "RUB",
@@ -1146,7 +1146,7 @@ describe("debt service", () => {
       paymentDate: new Date("2026-06-03T00:00:00.000Z"),
       amount: 10000,
       asset: "RUB",
-      comment: "Геворг вернул часть."
+      comment: "Контрагент Эпсилон вернул часть."
     });
 
     expect(db.debt.update).toHaveBeenCalledWith({
@@ -1309,18 +1309,18 @@ describe("buildDashboardSummary", () => {
     const summary = buildDashboardSummary({
       storagePlaces: [
         { asset: "RUB", amount: 980000, type: "income_bank_product", status: "active", attentionPriority: "medium", name: "Тбанк" },
-        { asset: "RUB", amount: 804000, type: "trusted_person", status: "check", attentionPriority: "high", name: "Альфабанк Вероники" },
+        { asset: "RUB", amount: 804000, type: "trusted_person", status: "check", attentionPriority: "high", name: "Альфабанк резервный" },
         { asset: "USDT", amount: 7331, type: "crypto_exchange", status: "active", attentionPriority: "high", name: "Bybit" }
       ],
       debts: [
-        { partyName: "Степан", remainingAmount: 25000, asset: "RUB", status: "scheduled", nextPaymentDate: new Date("2026-06-03T00:00:00.000Z") }
+        { partyName: "Контрагент Альфа", remainingAmount: 25000, asset: "RUB", status: "scheduled", nextPaymentDate: new Date("2026-06-03T00:00:00.000Z") }
       ],
       drafts: [{ id: "draft-1", status: "pending" }]
     });
 
     expect(summary.assets.RUB).toBe(1784000);
     expect(summary.assets.USDT).toBe(7331);
-    expect(summary.attentionStorage[0].name).toBe("Альфабанк Вероники");
+    expect(summary.attentionStorage[0].name).toBe("Альфабанк резервный");
     expect(summary.pendingDraftCount).toBe(1);
   });
 });
@@ -1440,10 +1440,10 @@ import { describe, expect, it } from "vitest";
 import { CreateDebtApiSchema } from "@/app/api/debts/route";
 
 describe("CreateDebtApiSchema", () => {
-  it("accepts Геворг personal debt payload", () => {
+  it("accepts Контрагент Эпсилон personal debt payload", () => {
     expect(
       CreateDebtApiSchema.parse({
-        partyName: "Геворг",
+        partyName: "Контрагент Эпсилон",
         type: "personal_debt",
         basis: "личный долг другу",
         asset: "RUB",
@@ -1452,7 +1452,7 @@ describe("CreateDebtApiSchema", () => {
         attentionPriority: "medium",
         comment: "Срок оплаты не согласован."
       })
-    ).toMatchObject({ partyName: "Геворг" });
+    ).toMatchObject({ partyName: "Контрагент Эпсилон" });
   });
 });
 ```
@@ -1658,11 +1658,11 @@ describe("AiParseResultSchema", () => {
   it("accepts a create debt action", () => {
     const parsed = AiParseResultSchema.parse({
       confidence: 0.86,
-      summary: "Создать долг Геворга на 50 000 RUB.",
+      summary: "Создать долг Контрагента Эпсилон на 50 000 RUB.",
       actions: [
         {
           type: "create_debt",
-          partyName: "Геворг",
+          partyName: "Контрагент Эпсилон",
           debtType: "personal_debt",
           basis: "личный долг другу",
           asset: "RUB",
@@ -1793,14 +1793,14 @@ describe("createAiDraft", () => {
     const draft = await createAiDraft(db as never, {
       ownerId: "owner-1",
       source: "telegram_text",
-      rawText: "Геворг вернул 10000",
+      rawText: "Контрагент Эпсилон вернул 10000",
       parseResult: {
         confidence: 0.9,
         summary: "Записать оплату 10 000 RUB.",
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Геворг",
+            partyName: "Контрагент Эпсилон",
             amount: 10000,
             asset: "RUB",
             paymentDate: "2026-06-03"
@@ -1956,7 +1956,7 @@ describe("applyAiActions", () => {
   it("applies create_storage_place action through audited service", async () => {
     const db = {
       storagePlace: {
-        create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Альфабанк Вероники" })
+        create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Альфабанк резервный" })
       },
       auditLog: {
         create: vi.fn().mockResolvedValue({ id: "audit-1" })
@@ -1970,16 +1970,16 @@ describe("applyAiActions", () => {
       actions: [
         {
           type: "create_storage_place",
-          name: "Альфабанк Вероники",
+          name: "Альфабанк резервный",
           storageType: "trusted_person",
           subtype: "not_applicable",
-          holderContext: "Вероника",
+          holderContext: "Другой владелец",
           asset: "RUB",
           amount: 804000,
           amountKind: "exact",
           availability: "restricted",
           attentionPriority: "high",
-          comment: "Мои деньги на Альфабанк Вероники."
+          comment: "Мои деньги на Альфабанк резервный."
         }
       ]
     });
@@ -2169,10 +2169,10 @@ describe("createOpenAiParser", () => {
             actions: [
               {
                 type: "create_storage_place",
-                name: "Альфабанк Вероники",
+                name: "Альфабанк резервный",
                 storageType: "trusted_person",
                 subtype: "not_applicable",
-                holderContext: "Вероника",
+                holderContext: "Другой владелец",
                 asset: "RUB",
                 amount: 804000,
                 amountKind: "exact",
@@ -2188,7 +2188,7 @@ describe("createOpenAiParser", () => {
 
     const parser = createOpenAiParser(client as never, "gpt-5.4-nano");
     const result = await parser.parseMessage({
-      text: "на альфабанк вероники 804000 руб",
+      text: "на альфабанк другого владельца 804000 руб",
       context: {
         todayIso: "2026-06-03",
         timezone: "Europe/Moscow",
@@ -2263,7 +2263,7 @@ describe("transcribeAudioFile", () => {
     const client = {
       audio: {
         transcriptions: {
-          create: vi.fn().mockResolvedValue({ text: "  Геворг вернул 10000  " })
+          create: vi.fn().mockResolvedValue({ text: "  Контрагент Эпсилон вернул 10000  " })
         }
       }
     };
@@ -2275,7 +2275,7 @@ describe("transcribeAudioFile", () => {
       language: "ru"
     });
 
-    expect(text).toBe("Геворг вернул 10000");
+    expect(text).toBe("Контрагент Эпсилон вернул 10000");
   });
 });
 ```
@@ -2374,12 +2374,12 @@ import { ParseMessageRequestSchema } from "@/app/api/parse-message/route";
 
 describe("ParseMessageRequestSchema", () => {
   it("accepts text and voice sources", () => {
-    expect(ParseMessageRequestSchema.parse({ text: "Геворг вернул 10000", source: "telegram_text" }).source).toBe("telegram_text");
+    expect(ParseMessageRequestSchema.parse({ text: "Контрагент Эпсилон вернул 10000", source: "telegram_text" }).source).toBe("telegram_text");
     expect(
       ParseMessageRequestSchema.parse({
-        text: "Геворг вернул 10000",
+        text: "Контрагент Эпсилон вернул 10000",
         source: "telegram_voice",
-        transcript: "Геворг вернул 10000"
+        transcript: "Контрагент Эпсилон вернул 10000"
       }).source
     ).toBe("telegram_voice");
   });
@@ -2461,7 +2461,7 @@ describe("verifyTelegramInitData", () => {
     const initData = signInitData(
       {
         auth_date: "1780440000",
-        user: JSON.stringify({ id: 123, first_name: "Hrach" })
+        user: JSON.stringify({ id: 123, first_name: "Owner" })
       },
       botToken
     );
@@ -2527,12 +2527,12 @@ describe("handleTelegramTextMessage", () => {
     const createDraftFromText = vi.fn().mockResolvedValue({
       id: "draft-1",
       parsedActions: {
-        summary: "Создать долг Геворга на 50 000 RUB."
+        summary: "Создать долг Контрагента Эпсилон на 50 000 RUB."
       }
     });
 
     const response = await handleTelegramTextMessage({
-      text: "Геворг должен 50000",
+      text: "Контрагент Эпсилон должен 50000",
       telegramUserId: "123",
       createDraftFromText
     });
@@ -3078,7 +3078,7 @@ export default function HomePage() {
       <div className="grid">
         <SummaryCard title="RUB" value="Пока нет данных" subtitle="Будет считаться из мест хранения" />
         <SummaryCard title="USDT" value="Пока нет данных" subtitle="Bybit и MetaMask попадут сюда" />
-        <SummaryCard title="Ближайшие платежи" value="0" subtitle="Степан, Даша и Грно после импорта" />
+        <SummaryCard title="Ближайшие платежи" value="0" subtitle="Контрагент Альфа, Контрагент Бета и Грно после импорта" />
         <QuickAddPanel />
       </div>
     </AppShell>
@@ -3188,9 +3188,9 @@ import { buildCurrentFinanceSeed } from "@/server/import/current-finance-seed";
 describe("buildCurrentFinanceSeed", () => {
   it("contains current real storage and debt examples", () => {
     const seed = buildCurrentFinanceSeed("2026-06-03");
-    expect(seed.storagePlaces.some((place) => place.name === "Альфабанк Вероники" && place.amount === 804000)).toBe(true);
-    expect(seed.debts.some((debt) => debt.partyName === "Геворг" && debt.originalAmount === 50000)).toBe(true);
-    expect(seed.debts.some((debt) => debt.partyName === "Степан Гаврилюк" && debt.nextPaymentDate === "2026-06-03")).toBe(true);
+    expect(seed.storagePlaces.some((place) => place.name === "Альфабанк резервный" && place.amount === 804000)).toBe(true);
+    expect(seed.debts.some((debt) => debt.partyName === "Контрагент Эпсилон" && debt.originalAmount === 50000)).toBe(true);
+    expect(seed.debts.some((debt) => debt.partyName === "Контрагент Альфа" && debt.nextPaymentDate === "2026-06-03")).toBe(true);
   });
 });
 ```
@@ -3211,12 +3211,12 @@ export function buildCurrentFinanceSeed(todayIso: string) {
       { name: "Bybit", type: "crypto_exchange", subtype: "not_applicable", holderContext: "мой Bybit", asset: "USDT", amount: 7331, amountKind: "equivalent", availability: "restricted", status: "active", attentionPriority: "high", comment: "USDT в эквиваленте." },
       { name: "MetaMask ETH-позиция", type: "crypto_wallet", subtype: "wallet", holderContext: "мой MetaMask", asset: "USDT", amount: 1000, amountKind: "equivalent", availability: "restricted", status: "active", attentionPriority: "high", comment: "ETH-позиция, записана как USDT-эквивалент." },
       { name: "MetaMask USDT", type: "crypto_wallet", subtype: "wallet", holderContext: "мой MetaMask", asset: "USDT", amount: 100, amountKind: "exact", availability: "restricted", status: "active", attentionPriority: "high", comment: "USDT в MetaMask." },
-      { name: "Альфабанк Вероники", type: "trusted_person", subtype: "not_applicable", holderContext: "Вероника", asset: "RUB", amount: 804000, amountKind: "exact", availability: "restricted", status: "check", attentionPriority: "high", comment: "Мои деньги на Альфабанк Вероники." }
+      { name: "Альфабанк резервный", type: "trusted_person", subtype: "not_applicable", holderContext: "Другой владелец", asset: "RUB", amount: 804000, amountKind: "exact", availability: "restricted", status: "check", attentionPriority: "high", comment: "Мои деньги на Альфабанк резервный." }
     ],
     debts: [
-      { partyName: "Степан Гаврилюк", type: "work_receivable", basis: "дипломная работа", asset: "RUB", originalAmount: 25000, status: "scheduled", nextPaymentAmount: 25000, nextPaymentDate: "2026-06-03", attentionPriority: "urgent", comment: "Клиент. Оплата до 3 июня 2026." },
-      { partyName: "Геворг", type: "personal_debt", basis: "личный долг другу", asset: "RUB", originalAmount: 50000, status: "no_agreement", attentionPriority: "medium", comment: "Срок оплаты не согласован." },
-      { partyName: "Даша Зайцева", type: "work_receivable", basis: "помощь по электричеству", asset: "RUB", originalAmount: 1500, status: "scheduled", nextPaymentAmount: 1500, nextPaymentDate: "2026-06-12", attentionPriority: "medium", comment: "Оплата до 12 июня 2026." },
+      { partyName: "Контрагент Альфа", type: "work_receivable", basis: "дипломная работа", asset: "RUB", originalAmount: 25000, status: "scheduled", nextPaymentAmount: 25000, nextPaymentDate: "2026-06-03", attentionPriority: "urgent", comment: "Клиент. Оплата до 3 июня 2026." },
+      { partyName: "Контрагент Эпсилон", type: "personal_debt", basis: "личный долг другу", asset: "RUB", originalAmount: 50000, status: "no_agreement", attentionPriority: "medium", comment: "Срок оплаты не согласован." },
+      { partyName: "Контрагент Бета", type: "work_receivable", basis: "помощь по электричеству", asset: "RUB", originalAmount: 1500, status: "scheduled", nextPaymentAmount: 1500, nextPaymentDate: "2026-06-12", attentionPriority: "medium", comment: "Оплата до 12 июня 2026." },
       { partyName: "Грно", type: "personal_debt", basis: "личный долг другу", asset: "RUB", originalAmount: 15000, status: "scheduled", nextPaymentAmount: 15000, nextPaymentDate: "2026-06-30", attentionPriority: "medium", comment: "Дедлайн до конца месяца." }
     ]
   };
@@ -3235,12 +3235,12 @@ describe("buildExportSnapshot", () => {
   it("returns Google-Sheets-ready named tables", () => {
     const snapshot = buildExportSnapshot({
       storagePlaces: [{ name: "ВТБ счет", asset: "RUB", amount: 268187 }],
-      debts: [{ partyName: "Геворг", asset: "RUB", remainingAmount: 50000 }],
+      debts: [{ partyName: "Контрагент Эпсилон", asset: "RUB", remainingAmount: 50000 }],
       payments: []
     });
 
     expect(snapshot["02 Места хранения"][0]).toEqual(["Название места", "Валюта/актив", "Текущая сумма"]);
-    expect(snapshot["03 Долги"][1]).toEqual(["Геворг", "RUB", 50000]);
+    expect(snapshot["03 Долги"][1]).toEqual(["Контрагент Эпсилон", "RUB", 50000]);
   });
 });
 ```
@@ -3407,7 +3407,7 @@ describe("createGoogleSheetsExportClient", () => {
       title: "Финансы export",
       tables: {
         "02 Места хранения": [["Название места"], ["ВТБ счет"]],
-        "03 Долги": [["Должник"], ["Геворг"]]
+        "03 Долги": [["Должник"], ["Контрагент Эпсилон"]]
       }
     });
 
@@ -3715,7 +3715,7 @@ git commit -m "docs: add finance app runbook"
 Run existing spreadsheet tests:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest discover -s tests
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest discover -s tests
 ```
 
 Expected:
@@ -3785,7 +3785,7 @@ Spec coverage:
 - AI drafts and explicit confirmation: Tasks 6-8 implement schemas, draft creation, and confirmation.
 - Audit history: Tasks 3-4 write audit logs through services.
 - Mobile PWA: Task 10 builds the mobile UI shell.
-- Current data import: Task 11 seeds debts, bank storage, crypto storage, and `Альфабанк Вероники`.
+- Current data import: Task 11 seeds debts, bank storage, crypto storage, and `Альфабанк резервный`.
 - Export: Task 11 provides a Sheets-ready snapshot; Task 12 creates a real Google Sheets spreadsheet through the Google Sheets API when `GOOGLE_OAUTH_ACCESS_TOKEN` is configured.
 
 No secrets are added to the repository. No task stores card numbers, bank passwords, private keys, or crypto seed phrases.

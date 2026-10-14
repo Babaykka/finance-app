@@ -101,7 +101,7 @@ export function QuickAddPanel() {
           aria-label="Текст для AI-черновика"
           className="quick-input"
           onChange={(event) => setText(event.target.value)}
-          placeholder="Геворг вернул 10000 рублей"
+          placeholder="Контрагент Эпсилон вернул 10000 рублей"
           value={text}
         />
         <button className="primary-button" disabled={isSubmitting || text.trim().length === 0} type="submit">

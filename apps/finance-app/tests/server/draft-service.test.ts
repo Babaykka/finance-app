@@ -12,14 +12,14 @@ describe("createAiDraft", () => {
     const draft = await createAiDraft(db as never, {
       ownerId: "owner-1",
       source: "telegram_text",
-      rawText: "Геворг вернул 10000",
+      rawText: "Контрагент Эпсилон вернул 10000",
       parseResult: {
         confidence: 0.9,
         summary: "Записать оплату 10 000 RUB.",
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Геворг",
+            partyName: "Контрагент Эпсилон",
             amount: 10000,
             asset: "RUB",
             paymentDate: "2026-06-03"

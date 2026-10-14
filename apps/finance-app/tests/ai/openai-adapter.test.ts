@@ -22,20 +22,20 @@ describe("OpenAI parser adapter", () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         confidence: 0.94,
-        summary: "Создать место хранения Альфабанк Вероники.",
+        summary: "Создать место хранения Альфабанк резервный.",
         actions: [
           {
             type: "create_storage_place",
-            name: "Альфабанк Вероники",
+            name: "Альфабанк резервный",
             storageType: "trusted_person",
             subtype: "not_applicable",
-            holderContext: "Вероника",
+            holderContext: "Другой владелец",
             asset: "RUB",
             amount: 804000,
             amountKind: "exact",
             availability: "restricted",
             attentionPriority: "high",
-            comment: "Мои деньги на Альфабанк Вероники."
+            comment: "Мои деньги на Альфабанк резервный."
           }
         ],
         needsClarification: []
@@ -43,7 +43,7 @@ describe("OpenAI parser adapter", () => {
     });
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
     const input = {
-      text: "804000 рублей лежат в Альфабанке у Вероники",
+      text: "804000 рублей лежат в Альфабанке у другого владельца",
       context: {
         todayIso: "2026-06-03",
         timezone: "Europe/Moscow",
@@ -76,7 +76,7 @@ describe("OpenAI parser adapter", () => {
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Геворг",
+            partyName: "Контрагент Эпсилон",
             amount: 10000,
             asset: "RUB",
             paidAt: "2026-06-03",
@@ -88,14 +88,14 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "Геворг вернул 10000 рублей",
+      text: "Контрагент Эпсилон вернул 10000 рублей",
       context: {
         todayIso: "2026-06-03",
         timezone: "Europe/Moscow",
         knownDebts: [
           {
             id: "debt-1",
-            partyName: "Геворг",
+            partyName: "Контрагент Эпсилон",
             remainingAmount: 50000,
             asset: "RUB"
           }
@@ -110,7 +110,7 @@ describe("OpenAI parser adapter", () => {
       actions: [
         {
           type: "record_debt_payment",
-          partyName: "Геворг",
+          partyName: "Контрагент Эпсилон",
           debtId: "debt-1",
           amount: 10000,
           asset: "RUB",
@@ -130,7 +130,7 @@ describe("OpenAI parser adapter", () => {
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Геворг",
+            partyName: "Контрагент Эпсилон",
             amount: 10000,
             asset: "RUB"
           }
@@ -141,14 +141,14 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "Геворг вернул 10000 рублей",
+      text: "Контрагент Эпсилон вернул 10000 рублей",
       context: {
         todayIso: "2026-06-03",
         timezone: "Europe/Moscow",
         knownDebts: [
           {
             id: "debt-1",
-            partyName: "Геворг",
+            partyName: "Контрагент Эпсилон",
             remainingAmount: 50000,
             asset: "RUB"
           }
@@ -159,7 +159,7 @@ describe("OpenAI parser adapter", () => {
 
     expect(result.actions[0]).toEqual({
       type: "record_debt_payment",
-      partyName: "Геворг",
+      partyName: "Контрагент Эпсилон",
       debtId: "debt-1",
       amount: 10000,
       asset: "RUB",
@@ -171,11 +171,11 @@ describe("OpenAI parser adapter", () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         confidence: 0.86,
-        summary: "Записать оплату долга Степана.",
+        summary: "Записать оплату долга Контрагента Альфа.",
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Степан Гаврилюк",
+            partyName: "Контрагент Альфа",
             amount: 25000,
             asset: "RUB",
             paymentDate: "2026-06-07"
@@ -187,14 +187,14 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "Степан Гаврилюк оплатил 25000 рублей",
+      text: "Контрагент Альфа оплатил 25000 рублей",
       context: {
         todayIso: "2026-06-07",
         timezone: "Europe/Moscow",
         knownDebts: [
           {
-            id: "debt-stepan",
-            partyName: "Степан Гаврилюк",
+            id: "debt-counterparty-alpha",
+            partyName: "Контрагент Альфа",
             remainingAmount: 25000,
             asset: "RUB"
           }
@@ -205,8 +205,8 @@ describe("OpenAI parser adapter", () => {
 
     expect(result.actions[0]).toEqual({
       type: "record_debt_payment",
-      partyName: "Степан Гаврилюк",
-      debtId: "debt-stepan",
+      partyName: "Контрагент Альфа",
+      debtId: "debt-counterparty-alpha",
       amount: 25000,
       asset: "RUB",
       paymentDate: "2026-06-07"
@@ -218,11 +218,11 @@ describe("OpenAI parser adapter", () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         confidence: 0.82,
-        summary: "Записать оплату Вероники.",
+        summary: "Записать оплату другого владельца.",
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Вероника",
+            partyName: "Другой владелец",
             amount: 18000,
             asset: "RUB",
             paymentDate: "2026-06-07"
@@ -234,20 +234,20 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "Вероника оплатила 5000 рублей и 13000 рублей",
+      text: "Другой владелец оплатила 5000 рублей и 13000 рублей",
       context: {
         todayIso: "2026-06-07",
         timezone: "Europe/Moscow",
         knownDebts: [
           {
-            id: "debt-veronika-1",
-            partyName: "Вероника",
+            id: "debt-holder-other-1",
+            partyName: "Другой владелец",
             remainingAmount: 5000,
             asset: "RUB"
           },
           {
-            id: "debt-veronika-2",
-            partyName: "Вероника",
+            id: "debt-holder-other-2",
+            partyName: "Другой владелец",
             remainingAmount: 13000,
             asset: "RUB"
           }
@@ -258,7 +258,7 @@ describe("OpenAI parser adapter", () => {
 
     expect(result.actions).toEqual([]);
     expect(result.needsClarification).toEqual([
-      "По имени «Вероника» найдено несколько долгов в RUB. Укажи, к какому долгу относится оплата 18000 RUB."
+      "По имени «Другой владелец» найдено несколько долгов в RUB. Укажи, к какому долгу относится оплата 18000 RUB."
     ]);
   });
 
@@ -266,18 +266,18 @@ describe("OpenAI parser adapter", () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         confidence: 0.88,
-        summary: "Записать две оплаты Вероники.",
+        summary: "Записать две оплаты другого владельца.",
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Вероника",
+            partyName: "Другой владелец",
             amount: 5000,
             asset: "RUB",
             paymentDate: "2026-06-07"
           },
           {
             type: "record_debt_payment",
-            partyName: "Вероника",
+            partyName: "Другой владелец",
             amount: 13000,
             asset: "RUB",
             paymentDate: "2026-06-07"
@@ -289,20 +289,20 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "Вероника оплатила долг 5000 рублей и 13000 рублей",
+      text: "Другой владелец оплатила долг 5000 рублей и 13000 рублей",
       context: {
         todayIso: "2026-06-07",
         timezone: "Europe/Moscow",
         knownDebts: [
           {
-            id: "debt-veronika-1",
-            partyName: "Вероника",
+            id: "debt-holder-other-1",
+            partyName: "Другой владелец",
             remainingAmount: 5000,
             asset: "RUB"
           },
           {
-            id: "debt-veronika-2",
-            partyName: "Вероника",
+            id: "debt-holder-other-2",
+            partyName: "Другой владелец",
             remainingAmount: 13000,
             asset: "RUB"
           }
@@ -314,16 +314,16 @@ describe("OpenAI parser adapter", () => {
     expect(result.actions).toEqual([
       {
         type: "record_debt_payment",
-        partyName: "Вероника",
-        debtId: "debt-veronika-1",
+        partyName: "Другой владелец",
+        debtId: "debt-holder-other-1",
         amount: 5000,
         asset: "RUB",
         paymentDate: "2026-06-07"
       },
       {
         type: "record_debt_payment",
-        partyName: "Вероника",
-        debtId: "debt-veronika-2",
+        partyName: "Другой владелец",
+        debtId: "debt-holder-other-2",
         amount: 13000,
         asset: "RUB",
         paymentDate: "2026-06-07"
@@ -336,18 +336,18 @@ describe("OpenAI parser adapter", () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         confidence: 0.88,
-        summary: "Записать две оплаты Вероники по одному долгу.",
+        summary: "Записать две оплаты другого владельца по одному долгу.",
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Вероника",
+            partyName: "Другой владелец",
             amount: 5000,
             asset: "RUB",
             paymentDate: "2026-06-07"
           },
           {
             type: "record_debt_payment",
-            partyName: "Вероника",
+            partyName: "Другой владелец",
             amount: 13000,
             asset: "RUB",
             paymentDate: "2026-06-07"
@@ -359,14 +359,14 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "Вероника оплатила долг 5000 рублей и 13000 рублей, суммарно 18000 из 18000",
+      text: "Другой владелец оплатила долг 5000 рублей и 13000 рублей, суммарно 18000 из 18000",
       context: {
         todayIso: "2026-06-07",
         timezone: "Europe/Moscow",
         knownDebts: [
           {
-            id: "debt-veronika",
-            partyName: "Вероника",
+            id: "debt-holder-other",
+            partyName: "Другой владелец",
             remainingAmount: 18000,
             asset: "RUB"
           }
@@ -378,16 +378,16 @@ describe("OpenAI parser adapter", () => {
     expect(result.actions).toEqual([
       {
         type: "record_debt_payment",
-        partyName: "Вероника",
-        debtId: "debt-veronika",
+        partyName: "Другой владелец",
+        debtId: "debt-holder-other",
         amount: 5000,
         asset: "RUB",
         paymentDate: "2026-06-07"
       },
       {
         type: "record_debt_payment",
-        partyName: "Вероника",
-        debtId: "debt-veronika",
+        partyName: "Другой владелец",
+        debtId: "debt-holder-other",
         amount: 13000,
         asset: "RUB",
         paymentDate: "2026-06-07"
@@ -400,11 +400,11 @@ describe("OpenAI parser adapter", () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         confidence: 0.88,
-        summary: "Записать оплату Степана.",
+        summary: "Записать оплату Контрагента Альфа.",
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Степан Гаврилюк",
+            partyName: "Контрагент Альфа",
             amount: "25 000",
             paidAt: "2026-06-07",
             comment: "Оплата дипломной работы."
@@ -416,14 +416,14 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "Степан Гаврилюк оплатил 25 000 рублей",
+      text: "Контрагент Альфа оплатил 25 000 рублей",
       context: {
         todayIso: "2026-06-07",
         timezone: "Europe/Moscow",
         knownDebts: [
           {
-            id: "debt-stepan",
-            partyName: "Степан Гаврилюк",
+            id: "debt-counterparty-alpha",
+            partyName: "Контрагент Альфа",
             remainingAmount: 25000,
             asset: "RUB"
           }
@@ -434,8 +434,8 @@ describe("OpenAI parser adapter", () => {
 
     expect(result.actions[0]).toEqual({
       type: "record_debt_payment",
-      partyName: "Степан Гаврилюк",
-      debtId: "debt-stepan",
+      partyName: "Контрагент Альфа",
+      debtId: "debt-counterparty-alpha",
       amount: 25000,
       asset: "RUB",
       paymentDate: "2026-06-07",
@@ -451,7 +451,7 @@ describe("OpenAI parser adapter", () => {
         actions: [
           {
             type: "create_debt",
-            partyName: "Даниил Мятный",
+            partyName: "Контрагент Гамма",
             category: "заказ",
             amount: 9000,
             asset: "RUB",
@@ -484,7 +484,7 @@ describe("OpenAI parser adapter", () => {
     expect(result.actions).toEqual([
       {
         type: "create_debt",
-        partyName: "Даниил Мятный",
+        partyName: "Контрагент Гамма",
         debtType: "work_receivable",
         basis: "заказ",
         amount: 9000,
@@ -511,11 +511,11 @@ describe("OpenAI parser adapter", () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         confidence: 0.84,
-        summary: "Создать долг Даши.",
+        summary: "Создать долг Контрагента Бета.",
         actions: [
           {
             type: "create_debt",
-            partyName: "Даша Зайцева",
+            partyName: "Контрагент Бета",
             debtType: "work_receivable",
             basis: "помощь по электричеству",
             amount: "1 500",
@@ -532,7 +532,7 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "Даше Зайцевой помощь по электричеству, она должна оплатить 1500 рублей до 12 июня",
+      text: "Контрагенту Бета помощь по электричеству, она должна оплатить 1500 рублей до 12 июня",
       context: {
         todayIso: "2026-06-07",
         timezone: "Europe/Moscow",
@@ -543,7 +543,7 @@ describe("OpenAI parser adapter", () => {
 
     expect(result.actions[0]).toEqual({
       type: "create_debt",
-      partyName: "Даша Зайцева",
+      partyName: "Контрагент Бета",
       debtType: "work_receivable",
       basis: "помощь по электричеству",
       amount: 1500,
@@ -559,11 +559,11 @@ describe("OpenAI parser adapter", () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         confidence: 0.9,
-        summary: "Добавление нового долга к Абелу на сумму 100000 рублей.",
+        summary: "Добавление нового долга к Контрагенту Дельта на сумму 100000 рублей.",
         actions: [
           {
             type: "create_debt",
-            partyName: "Абел",
+            partyName: "Контрагент Дельта",
             debtType: "personal_debt",
             basis: "личный долг",
             amount: 100000,
@@ -578,7 +578,7 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "У Абела у меня есть 100к рублей",
+      text: "У Контрагента Дельта у меня есть 100к рублей",
       context: {
         todayIso: "2026-06-05",
         timezone: "Europe/Moscow",
@@ -587,20 +587,20 @@ describe("OpenAI parser adapter", () => {
       }
     });
 
-    expect(result.summary).toBe("Добавить место хранения: Абел, 100000 RUB.");
+    expect(result.summary).toBe("Добавить место хранения: Контрагент Дельта, 100000 RUB.");
     expect(result.actions).toEqual([
       {
         type: "create_storage_place",
-        name: "Абел",
+        name: "Контрагент Дельта",
         storageType: "trusted_person",
         subtype: "not_applicable",
-        holderContext: "Абел",
+        holderContext: "Контрагент Дельта",
         asset: "RUB",
         amount: 100000,
         amountKind: "exact",
         availability: "restricted",
         attentionPriority: "medium",
-        comment: "Мои деньги находятся у этого человека; хранитель: Абел."
+        comment: "Мои деньги находятся у этого человека; хранитель: Контрагент Дельта."
       }
     ]);
   });
@@ -609,11 +609,11 @@ describe("OpenAI parser adapter", () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         confidence: 0.8,
-        summary: "Добавление нового долга к Абелу на сумму 100000 рублей.",
+        summary: "Добавление нового долга к Контрагенту Дельта на сумму 100000 рублей.",
         actions: [
           {
             type: "create_debt",
-            partyName: "Абел",
+            partyName: "Контрагент Дельта",
             amount: "100к",
             asset: "RUB"
           }
@@ -624,7 +624,7 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "У Абела 100к рублей",
+      text: "У Контрагента Дельта 100к рублей",
       context: {
         todayIso: "2026-06-07",
         timezone: "Europe/Moscow",
@@ -635,16 +635,16 @@ describe("OpenAI parser adapter", () => {
 
     expect(result.actions[0]).toEqual({
       type: "create_storage_place",
-      name: "Абел",
+      name: "Контрагент Дельта",
       storageType: "trusted_person",
       subtype: "not_applicable",
-      holderContext: "Абел",
+      holderContext: "Контрагент Дельта",
       asset: "RUB",
       amount: 100000,
       amountKind: "exact",
       availability: "restricted",
       attentionPriority: "medium",
-      comment: "Мои деньги находятся у этого человека; хранитель: Абел."
+      comment: "Мои деньги находятся у этого человека; хранитель: Контрагент Дельта."
     });
   });
 
@@ -652,11 +652,11 @@ describe("OpenAI parser adapter", () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         confidence: 0.82,
-        summary: "Добавление долга Вероники.",
+        summary: "Добавление долга другого владельца.",
         actions: [
           {
             type: "create_debt",
-            partyName: "Вероника",
+            partyName: "Другой владелец",
             amount: 804000,
             asset: "RUB"
           }
@@ -667,7 +667,7 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "у Вероники на Альфе 804000 рублей",
+      text: "у другого владельца на Альфе 804000 рублей",
       context: {
         todayIso: "2026-06-07",
         timezone: "Europe/Moscow",
@@ -678,16 +678,16 @@ describe("OpenAI parser adapter", () => {
 
     expect(result.actions[0]).toEqual({
       type: "create_storage_place",
-      name: "Вероника",
+      name: "Другой владелец",
       storageType: "trusted_person",
       subtype: "not_applicable",
-      holderContext: "Вероника",
+      holderContext: "Другой владелец",
       asset: "RUB",
       amount: 804000,
       amountKind: "exact",
       availability: "restricted",
       attentionPriority: "medium",
-      comment: "Мои деньги находятся у этого человека; хранитель: Вероника."
+      comment: "Мои деньги находятся у этого человека; хранитель: Другой владелец."
     });
   });
 
@@ -695,12 +695,12 @@ describe("OpenAI parser adapter", () => {
     const create = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         confidence: 0.9,
-        summary: "Создано место хранения денег у Абела.",
+        summary: "Создано место хранения денег у Контрагента Дельта.",
         actions: [
           {
             type: "create_storage_place",
             storageType: "trusted_person",
-            partyName: "Абел",
+            partyName: "Контрагент Дельта",
             amount: 100000,
             asset: "RUB"
           }
@@ -711,7 +711,7 @@ describe("OpenAI parser adapter", () => {
     const parser = createOpenAiParser({ responses: { create } }, "gpt-test");
 
     const result = await parser.parseMessage({
-      text: "У Абела у меня есть 100к рублей",
+      text: "У Контрагента Дельта у меня есть 100к рублей",
       context: {
         todayIso: "2026-06-05",
         timezone: "Europe/Moscow",
@@ -723,16 +723,16 @@ describe("OpenAI parser adapter", () => {
     expect(result.actions).toEqual([
       {
         type: "create_storage_place",
-        name: "Абел",
+        name: "Контрагент Дельта",
         storageType: "trusted_person",
         subtype: "not_applicable",
-        holderContext: "Абел",
+        holderContext: "Контрагент Дельта",
         asset: "RUB",
         amount: 100000,
         amountKind: "exact",
         availability: "restricted",
         attentionPriority: "medium",
-        comment: "Мои деньги находятся у этого человека; хранитель: Абел."
+        comment: "Мои деньги находятся у этого человека; хранитель: Контрагент Дельта."
       }
     ]);
   });

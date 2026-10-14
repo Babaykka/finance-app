@@ -5,7 +5,7 @@ describe("buildExportSnapshot", () => {
   it("returns Google-Sheets-ready named tables", () => {
     const snapshot = buildExportSnapshot({
       storagePlaces: [{ name: "ВТБ счет", asset: "RUB", amount: 268187 }],
-      debts: [{ partyName: "Геворг", asset: "RUB", remainingAmount: "50000" }],
+      debts: [{ partyName: "Контрагент Эпсилон", asset: "RUB", remainingAmount: "50000" }],
       payments: [
         {
           paymentDate: new Date("2026-06-03T00:00:00.000Z"),
@@ -22,7 +22,7 @@ describe("buildExportSnapshot", () => {
       "Текущая сумма"
     ]);
     expect(snapshot["02 Места хранения"][1]).toEqual(["ВТБ счет", "RUB", 268187]);
-    expect(snapshot["03 Долги"][1]).toEqual(["Геворг", "RUB", 50000]);
+    expect(snapshot["03 Долги"][1]).toEqual(["Контрагент Эпсилон", "RUB", 50000]);
     expect(snapshot["04 График и оплаты"][1]).toEqual([
       "2026-06-03",
       25000,

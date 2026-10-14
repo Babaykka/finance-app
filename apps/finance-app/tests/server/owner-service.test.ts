@@ -6,7 +6,7 @@ describe("ensureOwner", () => {
     const createdOwner = {
       id: "owner-1",
       telegramUserId: "tg-1",
-      displayName: "Hrach",
+      displayName: "Owner",
       settings: {},
       createdAt: new Date("2026-06-03T00:00:00.000Z")
     };
@@ -18,13 +18,13 @@ describe("ensureOwner", () => {
 
     const owner = await ensureOwner(db, {
       telegramUserId: "tg-1",
-      displayName: "Hrach"
+      displayName: "Owner"
     });
 
     expect(db.owner.upsert).toHaveBeenCalledWith({
       where: { telegramUserId: "tg-1" },
       update: {},
-      create: { telegramUserId: "tg-1", displayName: "Hrach" }
+      create: { telegramUserId: "tg-1", displayName: "Owner" }
     });
     expect(owner).toBe(createdOwner);
   });
@@ -33,7 +33,7 @@ describe("ensureOwner", () => {
     const existingOwner = {
       id: "owner-1",
       telegramUserId: "tg-1",
-      displayName: "Hrach",
+      displayName: "Owner",
       settings: {},
       createdAt: new Date("2026-06-03T00:00:00.000Z")
     };

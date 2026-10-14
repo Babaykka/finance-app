@@ -5,7 +5,7 @@ describe("debt service", () => {
   it("creates work receivable with a planned payment", async () => {
     const tx = {
       debt: {
-        create: vi.fn().mockResolvedValue({ id: "debt-1", partyName: "Степан Гаврилюк" }),
+        create: vi.fn().mockResolvedValue({ id: "debt-1", partyName: "Контрагент Альфа" }),
         findFirstOrThrow: vi.fn(),
         update: vi.fn()
       },
@@ -25,7 +25,7 @@ describe("debt service", () => {
       ownerId: "owner-1",
       actor: "telegram:123",
       source: "telegram_text",
-      partyName: "Степан Гаврилюк",
+      partyName: "Контрагент Альфа",
       type: "work_receivable",
       basis: "дипломная работа",
       asset: "RUB",
@@ -40,7 +40,7 @@ describe("debt service", () => {
     expect(db.debt.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         ownerId: "owner-1",
-        partyName: "Степан Гаврилюк",
+        partyName: "Контрагент Альфа",
         originalAmount: 25000,
         remainingAmount: 25000
       })
@@ -109,7 +109,7 @@ describe("debt service", () => {
       paymentDate: new Date("2026-06-03T00:00:00.000Z"),
       amount: 10000,
       asset: "RUB",
-      comment: "Геворг вернул часть."
+      comment: "Контрагент Эпсилон вернул часть."
     });
 
     expect(payment.id).toBe("payment-2");

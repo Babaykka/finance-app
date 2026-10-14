@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { createStoragePlace } from "@/server/services/storage-service";
 
 describe("createStoragePlace", () => {
-  it("creates Альфабанк Вероники as trusted-person RUB storage with audit", async () => {
+  it("creates Альфабанк резервный as trusted-person RUB storage with audit", async () => {
     const tx = {
       storagePlace: {
-        create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Альфабанк Вероники" })
+        create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Альфабанк резервный" })
       },
       auditLog: {
         create: vi.fn().mockResolvedValue({ id: "audit-1" })
@@ -20,17 +20,17 @@ describe("createStoragePlace", () => {
       ownerId: "owner-1",
       actor: "telegram:123",
       source: "telegram_text",
-      name: "Альфабанк Вероники",
+      name: "Альфабанк резервный",
       type: "trusted_person",
       subtype: "not_applicable",
-      holderContext: "Вероника",
+      holderContext: "Другой владелец",
       asset: "RUB",
       amount: 804000,
       amountKind: "exact",
       availability: "restricted",
       status: "check",
       attentionPriority: "high",
-      comment: "Мои деньги на Альфабанк Вероники."
+      comment: "Мои деньги на Альфабанк резервный."
     });
 
     expect(result.id).toBe("storage-1");
@@ -38,17 +38,17 @@ describe("createStoragePlace", () => {
     expect(db.storagePlace.create).toHaveBeenCalledWith({
       data: {
         ownerId: "owner-1",
-        name: "Альфабанк Вероники",
+        name: "Альфабанк резервный",
         type: "trusted_person",
         subtype: "not_applicable",
-        holderContext: "Вероника",
+        holderContext: "Другой владелец",
         asset: "RUB",
         amount: 804000,
         amountKind: "exact",
         availability: "restricted",
         status: "check",
         attentionPriority: "high",
-        comment: "Мои деньги на Альфабанк Вероники."
+        comment: "Мои деньги на Альфабанк резервный."
       }
     });
     expect(db.auditLog.create).toHaveBeenCalledOnce();
@@ -80,10 +80,10 @@ describe("createStoragePlace", () => {
         ownerId: "owner-1",
         actor: "",
         source: "telegram_text",
-        name: "Альфабанк Вероники",
+        name: "Альфабанк резервный",
         type: "trusted_person",
         subtype: "not_applicable",
-        holderContext: "Вероника",
+        holderContext: "Другой владелец",
         asset: "RUB",
         amount: 804000,
         amountKind: "exact",

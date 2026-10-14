@@ -20,7 +20,7 @@ describe("buildDashboardSummary", () => {
           type: "trusted_person",
           status: "check",
           attentionPriority: "high",
-          name: "Альфабанк Вероники"
+          name: "Альфабанк резервный"
         },
         {
           asset: "USDT",
@@ -33,7 +33,7 @@ describe("buildDashboardSummary", () => {
       ],
       debts: [
         {
-          partyName: "Степан",
+          partyName: "Контрагент Альфа",
           remainingAmount: 25000,
           asset: "RUB",
           status: "scheduled",
@@ -55,8 +55,8 @@ describe("buildDashboardSummary", () => {
 
     expect(summary.assets.RUB).toBe(1784000);
     expect(summary.assets.USDT).toBe(7331);
-    expect(summary.attentionStorage[0].name).toBe("Альфабанк Вероники");
-    expect(summary.upcomingDebts.map((debt) => debt.partyName)).toEqual(["Степан"]);
+    expect(summary.attentionStorage[0].name).toBe("Альфабанк резервный");
+    expect(summary.upcomingDebts.map((debt) => debt.partyName)).toEqual(["Контрагент Альфа"]);
     expect(summary.pendingDraftCount).toBe(1);
   });
 

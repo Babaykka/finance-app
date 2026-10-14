@@ -157,7 +157,7 @@ describe("telegram webhook route", () => {
   it("handles text messages through parse-message and sends Telegram buttons", async () => {
     const draft = {
       id: "draft-1",
-      parsedActions: { summary: "Создать долг Геворга на 50 000 RUB." }
+      parsedActions: { summary: "Создать долг Контрагента Эпсилон на 50 000 RUB." }
     };
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
@@ -168,13 +168,13 @@ describe("telegram webhook route", () => {
         message: {
           chat: { id: 456 },
           from: { id: 123 },
-          text: "Геворг должен 50000"
+          text: "Контрагент Эпсилон должен 50000"
         }
       })
     );
 
     expect(mocks.createDraftFromParsedMessage).toHaveBeenCalledWith({
-      text: "Геворг должен 50000",
+      text: "Контрагент Эпсилон должен 50000",
       source: "telegram_text"
     });
     expect(fetcher).not.toHaveBeenCalled();
@@ -182,7 +182,7 @@ describe("telegram webhook route", () => {
       fetcher,
       botToken: "token",
       chatId: 456,
-      text: "Черновик: Создать долг Геворга на 50 000 RUB.",
+      text: "Черновик: Создать долг Контрагента Эпсилон на 50 000 RUB.",
       buttons: [
         { text: "Сохранить", callbackData: "draft:draft-1:confirm" },
         { text: "Исправить", callbackData: "draft:draft-1:edit" },
@@ -206,7 +206,7 @@ describe("telegram webhook route", () => {
         message: {
           chat: { id: 456 },
           from: { id: 123 },
-          text: "Геворг должен 50000"
+          text: "Контрагент Эпсилон должен 50000"
         }
       })
     );
@@ -280,7 +280,7 @@ describe("telegram webhook route", () => {
           chat: { id: 456, type: "private" },
           from: { id: 123 },
           message_thread_id: 1620865,
-          text: "Геворг должен 50000"
+          text: "Контрагент Эпсилон должен 50000"
         }
       })
     );
@@ -490,7 +490,7 @@ describe("telegram webhook route", () => {
     process.env.OPENAI_TRANSCRIBE_MODEL = "voice-model";
     mocks.createDraftFromParsedMessage.mockResolvedValue(draft);
     mocks.downloadTelegramVoiceFile.mockResolvedValue(voiceFile);
-    mocks.transcribeAudioFile.mockResolvedValue("Геворг вернул 10000 рублей");
+    mocks.transcribeAudioFile.mockResolvedValue("Контрагент Эпсилон вернул 10000 рублей");
 
     const response = await POST(
       telegramWebhookRequest({
@@ -514,8 +514,8 @@ describe("telegram webhook route", () => {
       language: "ru"
     });
     expect(mocks.createDraftFromParsedMessage).toHaveBeenCalledWith({
-      text: "Геворг вернул 10000 рублей",
-      transcript: "Геворг вернул 10000 рублей",
+      text: "Контрагент Эпсилон вернул 10000 рублей",
+      transcript: "Контрагент Эпсилон вернул 10000 рублей",
       source: "telegram_voice"
     });
     expect(mocks.sendTelegramMessage).toHaveBeenCalledWith({
@@ -595,7 +595,7 @@ describe("telegram webhook route", () => {
         message: {
           chat: { id: 456 },
           from: { id: 999 },
-          text: "Геворг должен 50000"
+          text: "Контрагент Эпсилон должен 50000"
         }
       })
     );
@@ -614,7 +614,7 @@ describe("telegram webhook route", () => {
         message: {
           chat: { id: 456 },
           from: { id: 123 },
-          text: "Геворг должен 50000"
+          text: "Контрагент Эпсилон должен 50000"
         }
       })
     );
@@ -678,7 +678,7 @@ describe("telegram webhook route", () => {
         message: {
           chat: { id: "456" },
           from: { id: 123 },
-          text: "Геворг должен 50000"
+          text: "Контрагент Эпсилон должен 50000"
         }
       })
     );

@@ -120,22 +120,22 @@ export function buildCurrentFinanceSeed(todayIso: string): CurrentFinanceSeed {
         comment: "USDT в MetaMask."
       },
       {
-        name: "Альфабанк Вероники",
+        name: "Альфабанк резервный",
         type: "trusted_person",
         subtype: "not_applicable",
-        holderContext: "Вероника",
+        holderContext: "Другой владелец",
         asset: "RUB",
         amount: 804000,
         amountKind: "exact",
         availability: "restricted",
         status: "check",
         attentionPriority: "high",
-        comment: "Мои деньги на Альфабанк Вероники."
+        comment: "Мои деньги на Альфабанк резервный."
       }
     ],
     debts: [
       {
-        partyName: "Степан Гаврилюк",
+        partyName: "Контрагент Альфа",
         type: "work_receivable",
         basis: "дипломная работа",
         asset: "RUB",
@@ -147,7 +147,7 @@ export function buildCurrentFinanceSeed(todayIso: string): CurrentFinanceSeed {
         comment: "Клиент. Оплата до 3 июня 2026."
       },
       {
-        partyName: "Геворг",
+        partyName: "Контрагент Эпсилон",
         type: "personal_debt",
         basis: "личный долг другу",
         asset: "RUB",
@@ -157,7 +157,7 @@ export function buildCurrentFinanceSeed(todayIso: string): CurrentFinanceSeed {
         comment: "Срок оплаты не согласован."
       },
       {
-        partyName: "Даша Зайцева",
+        partyName: "Контрагент Бета",
         type: "work_receivable",
         basis: "помощь по электричеству",
         asset: "RUB",

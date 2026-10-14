@@ -3,7 +3,7 @@ import { transcribeAudioFile } from "@/server/ai/transcription";
 
 describe("transcribeAudioFile", () => {
   it("returns trimmed transcription text from the OpenAI client", async () => {
-    const create = vi.fn().mockResolvedValue({ text: "  Геворг вернул 10000 рублей  " });
+    const create = vi.fn().mockResolvedValue({ text: "  Контрагент Эпсилон вернул 10000 рублей  " });
     const file = new File(["voice"], "voice.ogg", { type: "audio/ogg" });
 
     const text = await transcribeAudioFile(
@@ -16,7 +16,7 @@ describe("transcribeAudioFile", () => {
       model: "gpt-4o-mini-transcribe",
       language: "ru"
     });
-    expect(text).toBe("Геворг вернул 10000 рублей");
+    expect(text).toBe("Контрагент Эпсилон вернул 10000 рублей");
   });
 
   it("throws when the transcription text is missing", async () => {

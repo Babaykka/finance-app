@@ -28,7 +28,7 @@ describe("createGoogleSheetsExportClient", () => {
       title: "Финансы export",
       tables: {
         "02 Места хранения": [["Название места"], ["ВТБ счет"]],
-        "03 Долги": [["Должник"], ["Геворг"]]
+        "03 Долги": [["Должник"], ["Контрагент Эпсилон"]]
       }
     });
 
@@ -77,7 +77,7 @@ describe("createGoogleSheetsExportClient", () => {
         {
           range: "'03 Долги'!A1",
           majorDimension: "ROWS",
-          values: [["Должник"], ["Геворг"]]
+          values: [["Должник"], ["Контрагент Эпсилон"]]
         }
       ]
     });

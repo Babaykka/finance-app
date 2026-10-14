@@ -71,7 +71,7 @@ describe("Telegram auth route", () => {
     const initData = signInitData(
       {
         auth_date: String(Math.floor(Date.now() / 1000)),
-        user: JSON.stringify({ id: 123, first_name: "Hrach" })
+        user: JSON.stringify({ id: 123, first_name: "Owner" })
       },
       "bot-token"
     );

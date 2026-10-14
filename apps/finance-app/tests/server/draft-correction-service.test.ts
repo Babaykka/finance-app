@@ -75,7 +75,7 @@ describe("applySimpleDraftCorrection", () => {
         actions: [
           {
             type: "create_debt",
-            partyName: "Абел",
+            partyName: "Контрагент Дельта",
             debtType: "personal_debt",
             basis: "личный долг",
             asset: "RUB",

@@ -46,7 +46,7 @@ describe("export snapshot route", () => {
 
   it("reads owner-scoped finance rows and returns a built snapshot", async () => {
     const storagePlaces = [{ name: "ВТБ счет", asset: "RUB", amount: "268187" }];
-    const debts = [{ partyName: "Геворг", asset: "RUB", remainingAmount: "50000" }];
+    const debts = [{ partyName: "Контрагент Эпсилон", asset: "RUB", remainingAmount: "50000" }];
     const payments = [
       {
         paymentDate: new Date("2026-06-03T00:00:00.000Z"),

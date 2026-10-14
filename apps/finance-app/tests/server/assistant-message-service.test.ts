@@ -36,7 +36,7 @@ describe("assistant-message-service", () => {
       debt: {
         findMany: vi.fn().mockResolvedValue([
           {
-            partyName: "Геворг",
+            partyName: "Контрагент Эпсилон",
             type: "personal_debt",
             basis: "личный долг другу",
             asset: "RUB",
@@ -181,7 +181,7 @@ describe("assistant-message-service", () => {
       ],
       debts: [
         {
-          partyName: "Геворг",
+          partyName: "Контрагент Эпсилон",
           type: "personal_debt",
           basis: "личный долг другу",
           asset: "RUB",

@@ -64,7 +64,7 @@ describe("import current route", () => {
       return { id: "storage-created" };
     });
     mocks.createDebtWithOptionalPlan.mockImplementation(async (_prisma, input) => {
-      if (input.partyName === "Геворг") {
+      if (input.partyName === "Контрагент Эпсилон") {
         throw { code: "P2002" };
       }
 
@@ -93,7 +93,7 @@ describe("import current route", () => {
         ownerId: "owner-1",
         actor: "import:current-finance-seed",
         source: "import",
-        partyName: "Степан Гаврилюк",
+        partyName: "Контрагент Альфа",
         nextPaymentDate: new Date("2026-06-03T00:00:00.000Z")
       })
     );

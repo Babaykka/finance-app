@@ -5,11 +5,11 @@ describe("AiParseResultSchema", () => {
   it("accepts a create debt action", () => {
     const parsed = AiParseResultSchema.parse({
       confidence: 0.86,
-      summary: "Создать долг Геворга на 50 000 RUB.",
+      summary: "Создать долг Контрагента Эпсилон на 50 000 RUB.",
       actions: [
         {
           type: "create_debt",
-          partyName: "Геворг",
+          partyName: "Контрагент Эпсилон",
           debtType: "personal_debt",
           basis: "личный долг другу",
           asset: "RUB",
@@ -54,7 +54,7 @@ describe("AiParseResultSchema", () => {
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Геворг",
+            partyName: "Контрагент Эпсилон",
             amount: 10000,
             asset: "RUB",
             paymentDate: "сегодня"
@@ -73,7 +73,7 @@ describe("AiParseResultSchema", () => {
         actions: [
           {
             type: "create_debt",
-            partyName: "Геворг",
+            partyName: "Контрагент Эпсилон",
             debtType: "personal_debt",
             basis: "личный долг другу",
             asset: "RUB",

@@ -59,7 +59,7 @@ describe("Google Sheets export route", () => {
     process.env.GOOGLE_OAUTH_ACCESS_TOKEN = "google-token";
     mocks.getLocalOwner.mockResolvedValue({ id: "owner-1", telegramUserId: "123" });
     mocks.storagePlaceFindMany.mockResolvedValue([{ name: "ВТБ счет", asset: "RUB", amount: "1" }]);
-    mocks.debtFindMany.mockResolvedValue([{ partyName: "Геворг", asset: "RUB", remainingAmount: "2" }]);
+    mocks.debtFindMany.mockResolvedValue([{ partyName: "Контрагент Эпсилон", asset: "RUB", remainingAmount: "2" }]);
     mocks.debtPaymentFindMany.mockResolvedValue([]);
     mocks.buildExportSnapshot.mockReturnValue({
       "02 Места хранения": [["Название места"], ["ВТБ счет"]]
@@ -128,7 +128,7 @@ describe("Google Sheets export route", () => {
     });
     expect(mocks.buildExportSnapshot).toHaveBeenCalledWith({
       storagePlaces: [{ name: "ВТБ счет", asset: "RUB", amount: "1" }],
-      debts: [{ partyName: "Геворг", asset: "RUB", remainingAmount: "2" }],
+      debts: [{ partyName: "Контрагент Эпсилон", asset: "RUB", remainingAmount: "2" }],
       payments: []
     });
     expect(mocks.createGoogleSheetsExportClient).toHaveBeenCalledWith({

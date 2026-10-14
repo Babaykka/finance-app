@@ -11,7 +11,7 @@
 Выполните команду из корня проекта:
 
 ```bash
-/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m finance_system.workbook --output dist/finance-system-template.xlsx
+/Users/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m finance_system.workbook --output dist/finance-system-template.xlsx
 ```
 
 После сборки импортируйте `dist/finance-system-template.xlsx` в Google Sheets.

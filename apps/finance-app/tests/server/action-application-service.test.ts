@@ -5,7 +5,7 @@ describe("applyAiActions", () => {
   it("applies create_storage_place through the audited storage service", async () => {
     const db = {
       storagePlace: {
-        create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Альфабанк Вероники" })
+        create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Альфабанк резервный" })
       },
       auditLog: {
         create: vi.fn().mockResolvedValue({ id: "audit-1" })
@@ -19,37 +19,37 @@ describe("applyAiActions", () => {
       actions: [
         {
           type: "create_storage_place",
-          name: "Альфабанк Вероники",
+          name: "Альфабанк резервный",
           storageType: "trusted_person",
           subtype: "not_applicable",
-          holderContext: "Вероника",
+          holderContext: "Другой владелец",
           asset: "RUB",
           amount: 804000,
           amountKind: "exact",
           availability: "restricted",
           attentionPriority: "high",
-          comment: "Мои деньги на Альфабанк Вероники."
+          comment: "Мои деньги на Альфабанк резервный."
         }
       ]
     });
 
     expect(results).toHaveLength(1);
-    expect(results[0]).toEqual({ id: "storage-1", name: "Альфабанк Вероники" });
+    expect(results[0]).toEqual({ id: "storage-1", name: "Альфабанк резервный" });
     expect(db.storagePlace.create).toHaveBeenCalledOnce();
     expect(db.storagePlace.create).toHaveBeenCalledWith({
       data: {
         ownerId: "owner-1",
-        name: "Альфабанк Вероники",
+        name: "Альфабанк резервный",
         type: "trusted_person",
         subtype: "not_applicable",
-        holderContext: "Вероника",
+        holderContext: "Другой владелец",
         asset: "RUB",
         amount: 804000,
         amountKind: "exact",
         availability: "restricted",
         status: "check",
         attentionPriority: "high",
-        comment: "Мои деньги на Альфабанк Вероники."
+        comment: "Мои деньги на Альфабанк резервный."
       }
     });
     expect(db.auditLog.create).toHaveBeenCalledOnce();
@@ -58,7 +58,7 @@ describe("applyAiActions", () => {
   it("opens a batch transaction when the db supports it", async () => {
     const tx = {
       storagePlace: {
-        create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Альфабанк Вероники" })
+        create: vi.fn().mockResolvedValue({ id: "storage-1", name: "Альфабанк резервный" })
       },
       auditLog: {
         create: vi.fn().mockResolvedValue({ id: "audit-1" })
@@ -76,10 +76,10 @@ describe("applyAiActions", () => {
       actions: [
         {
           type: "create_storage_place",
-          name: "Альфабанк Вероники",
+          name: "Альфабанк резервный",
           storageType: "trusted_person",
           subtype: "not_applicable",
-          holderContext: "Вероника",
+          holderContext: "Другой владелец",
           asset: "RUB",
           amount: 804000,
           amountKind: "exact",
@@ -274,7 +274,7 @@ describe("applyAiActions", () => {
   it("maps create_debt due dates to planned payments", async () => {
     const db = {
       debt: {
-        create: vi.fn().mockResolvedValue({ id: "debt-1", partyName: "Геворг" }),
+        create: vi.fn().mockResolvedValue({ id: "debt-1", partyName: "Контрагент Эпсилон" }),
         findFirstOrThrow: vi.fn(),
         update: vi.fn()
       },
@@ -293,7 +293,7 @@ describe("applyAiActions", () => {
       actions: [
         {
           type: "create_debt",
-          partyName: "Геворг",
+          partyName: "Контрагент Эпсилон",
           debtType: "personal_debt",
           basis: "личный долг другу",
           asset: "RUB",
@@ -381,7 +381,7 @@ describe("applyAiActions", () => {
         actions: [
           {
             type: "record_debt_payment",
-            partyName: "Геворг",
+            partyName: "Контрагент Эпсилон",
             amount: 10000,
             asset: "RUB",
             paymentDate: "2026-06-03"

@@ -24,7 +24,7 @@ const SYSTEM_PROMPT = [
     actions: [
       {
         type: "record_debt_payment",
-        partyName: "Геворг",
+        partyName: "Контрагент Эпсилон",
         amount: 10000,
         asset: "RUB",
         paymentDate: "2026-06-03",

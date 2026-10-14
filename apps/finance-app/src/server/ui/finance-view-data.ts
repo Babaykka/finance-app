@@ -67,7 +67,7 @@ const ATTENTION_PRIORITY_RANK: Record<AttentionPriority, number> = {
 
 const EMPTY_VIEW_DATA: FinanceViewData = {
   isReady: false,
-  ownerName: "Hrach",
+  ownerName: "Owner",
   assetTotals: [],
   storagePlaces: [],
   debts: [],

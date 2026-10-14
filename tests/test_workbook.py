@@ -10,7 +10,7 @@ from finance_system.schema import LISTS, SHEETS
 from finance_system.workbook import DATA_ROW_LIMIT, build_workbook, column_letter_for
 
 
-BUNDLED_PYTHON = Path("/Users/hrach/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3")
+BUNDLED_PYTHON = Path.home() / '.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3'
 
 
 class WorkbookTest(unittest.TestCase):

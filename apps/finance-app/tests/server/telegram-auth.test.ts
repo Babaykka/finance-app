@@ -21,7 +21,7 @@ describe("verifyTelegramInitData", () => {
     const initData = signInitData(
       {
         auth_date: nowSeconds,
-        user: JSON.stringify({ id: 123, first_name: "Hrach" })
+        user: JSON.stringify({ id: 123, first_name: "Owner" })
       },
       botToken
     );
@@ -29,13 +29,13 @@ describe("verifyTelegramInitData", () => {
     const result = verifyTelegramInitData(initData, botToken, { now });
 
     expect(result.user.id).toBe(123);
-    expect(result.user.first_name).toBe("Hrach");
+    expect(result.user.first_name).toBe("Owner");
   });
 
   it("throws when hash is missing", () => {
     const initData = new URLSearchParams({
       auth_date: nowSeconds,
-      user: JSON.stringify({ id: 123, first_name: "Hrach" })
+      user: JSON.stringify({ id: 123, first_name: "Owner" })
     }).toString();
 
     expect(() => verifyTelegramInitData(initData, "test-token")).toThrow(
@@ -46,7 +46,7 @@ describe("verifyTelegramInitData", () => {
   it("throws on mismatched or malformed hashes without unsafe buffer compares", () => {
     const initData = new URLSearchParams({
       auth_date: nowSeconds,
-      user: JSON.stringify({ id: 123, first_name: "Hrach" }),
+      user: JSON.stringify({ id: 123, first_name: "Owner" }),
       hash: "bad"
     }).toString();
 
@@ -58,7 +58,7 @@ describe("verifyTelegramInitData", () => {
   it("throws when auth_date is missing from otherwise signed init data", () => {
     const initData = signInitData(
       {
-        user: JSON.stringify({ id: 123, first_name: "Hrach" })
+        user: JSON.stringify({ id: 123, first_name: "Owner" })
       },
       "test-token"
     );
@@ -72,7 +72,7 @@ describe("verifyTelegramInitData", () => {
     const initData = signInitData(
       {
         auth_date: "not-a-number",
-        user: JSON.stringify({ id: 123, first_name: "Hrach" })
+        user: JSON.stringify({ id: 123, first_name: "Owner" })
       },
       "test-token"
     );
@@ -87,7 +87,7 @@ describe("verifyTelegramInitData", () => {
     const initData = signInitData(
       {
         auth_date: staleSeconds,
-        user: JSON.stringify({ id: 123, first_name: "Hrach" })
+        user: JSON.stringify({ id: 123, first_name: "Owner" })
       },
       "test-token"
     );

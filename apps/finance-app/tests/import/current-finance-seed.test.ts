@@ -12,15 +12,15 @@ describe("buildCurrentFinanceSeed", () => {
     expect(seed.debts).toHaveLength(4);
     expect(
       seed.storagePlaces.some(
-        (place) => place.name === "Альфабанк Вероники" && place.amount === 804000
+        (place) => place.name === "Альфабанк резервный" && place.amount === 804000
       )
     ).toBe(true);
     expect(
-      seed.debts.some((debt) => debt.partyName === "Геворг" && debt.originalAmount === 50000)
+      seed.debts.some((debt) => debt.partyName === "Контрагент Эпсилон" && debt.originalAmount === 50000)
     ).toBe(true);
     expect(
       seed.debts.some(
-        (debt) => debt.partyName === "Степан Гаврилюк" && debt.nextPaymentDate === "2026-06-03"
+        (debt) => debt.partyName === "Контрагент Альфа" && debt.nextPaymentDate === "2026-06-03"
       )
     ).toBe(true);
     expect(seed.storagePlaces.find((place) => place.name === "Тбанк накопительный счет")?.rate).toBe(

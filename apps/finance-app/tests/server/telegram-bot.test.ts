@@ -6,19 +6,19 @@ describe("handleTelegramTextMessage", () => {
     const createDraftFromText = vi.fn().mockResolvedValue({
       id: "draft-1",
       parsedActions: {
-        summary: "Создать долг Геворга на 50 000 RUB."
+        summary: "Создать долг Контрагента Эпсилон на 50 000 RUB."
       }
     });
 
     const response = await handleTelegramTextMessage({
-      text: "Геворг должен 50000",
+      text: "Контрагент Эпсилон должен 50000",
       telegramUserId: "123",
       createDraftFromText
     });
 
-    expect(createDraftFromText).toHaveBeenCalledWith("Геворг должен 50000", "123");
+    expect(createDraftFromText).toHaveBeenCalledWith("Контрагент Эпсилон должен 50000", "123");
     expect(response.text).toContain("Черновик");
-    expect(response.text).toContain("Создать долг Геворга");
+    expect(response.text).toContain("Создать долг Контрагента Эпсилон");
     expect(response.buttons).toEqual([
       { text: "Сохранить", callbackData: "draft:draft-1:confirm" },
       { text: "Исправить", callbackData: "draft:draft-1:edit" },
